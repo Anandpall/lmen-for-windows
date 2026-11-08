@@ -1,26 +1,20 @@
-## Build results
-[Bb]in/
-[Oo]bj/
-[Ll]og/
-[Ll]ogs/
+# Build output
+bin/
+obj/
+dist/
+Release_App/
+*.exe
+*.pdb
 
-## Visual Studio
+# Local debug logs
+app_debug.log
+*.log
+
+# IDE
 .vs/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-*.userprefs
-
-## Rider / JetBrains
-.idea/
-*.sln.iml
-
-## VS Code
 .vscode/
+*.user
 
-## Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
+# Local reference checkouts and scratch files
+ref/
+mockflow-apple-liquid-glass/

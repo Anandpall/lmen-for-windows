@@ -1,0 +1,34 @@
+<Window x:Class="LmenV2.Views.DesktopOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lmen v2 - Desktop Edge Overlay"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowState="Normal"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        IsTabStop="False"
+        Loaded="Window_Loaded"
+        SizeChanged="Window_SizeChanged">
+
+    <Grid Background="Transparent">
+        <!-- ========================================================= -->
+        <!-- SINGLE ROTATING GLOW BEAM WITH WIDE EMPTY SPACE            -->
+        <!-- 55% Glowing Beam - 45% Pure Empty Space                    -->
+        <!--                                                            -->
+        <!-- The beam itself is built in code (Rendering/EdgeBeam.cs):  -->
+        <!-- a stack of dashed translucent outlines whose alpha falls   -->
+        <!-- off exponentially. The previous version here was two       -->
+        <!-- rectangles with BlurEffect Radius 30 / 65, and WPF renders -->
+        <!-- those on a reduced-resolution layer, which is what made    -->
+        <!-- the halo blocky, banded and expensive at full screen.      -->
+        <!-- ========================================================= -->
+        <Grid x:Name="BeamHost"
+              Background="{x:Null}"
+              IsHitTestVisible="False" />
+    </Grid>
+</Window>

@@ -1,0 +1,1150 @@
+<Window x:Class="LmenV2.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lmen v2 - Settings"
+        Width="560" Height="700"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="Transparent"
+        Foreground="#1C1C1E"
+        FontFamily="SF Pro Display, Segoe UI Variable Display, Segoe UI"
+        FontSize="13"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Ideal"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <!-- ========================================================= -->
+        <!-- APPLE LIQUID GLASS DESIGN TOKENS                          -->
+        <!-- BG #F2F2F7 · Surfaces #FFFFFF · Accent #007AFF             -->
+        <!-- Cards 20px · Buttons 12px · Text #000000 / #3C3C43        -->
+        <!-- ========================================================= -->
+
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#8E8E93"/>
+            <Setter Property="Margin" Value="6,0,0,8"/>
+        </Style>
+
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#E6E6EB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="20"/>
+            <Setter Property="Padding" Value="18"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#23253A" BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.08"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconTile" TargetType="Border">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="CornerRadius" Value="11"/>
+            <Setter Property="Margin" Value="0,0,11,0"/>
+        </Style>
+
+        <!-- Frosted circular close button -->
+        <Style x:Key="CircleGlassButton" TargetType="Button">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Background" Value="#F2F2F7"/>
+            <Setter Property="Foreground" Value="#6E6E73"/>
+            <Setter Property="BorderBrush" Value="#E3E3E8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="circle"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="17">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="1.5" Opacity="0.10"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="circle" Property="Background" Value="#E9E9EE"/>
+                                <Setter Property="Foreground" Value="#3C3C43"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="circle" Property="Background" Value="#DDDDE3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Glossy iOS blue pill button -->
+        <Style x:Key="PrimaryPillButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="24,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="fill" CornerRadius="12">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#4CA6FF" Offset="0"/>
+                                        <GradientStop Color="#007AFF" Offset="0.55"/>
+                                        <GradientStop Color="#0067D6" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#007AFF" BlurRadius="14" ShadowDepth="4" Direction="270" Opacity="0.32"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="sheen" CornerRadius="12" IsHitTestVisible="False" Margin="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#66FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#00FFFFFF" Offset="0.55"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RenderTransformOrigin="0.5,0.5">
+                                <ContentPresenter.RenderTransform>
+                                    <ScaleTransform x:Name="contentScale" ScaleX="1" ScaleY="1"/>
+                                </ContentPresenter.RenderTransform>
+                            </ContentPresenter>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="sheen" Property="Opacity" Value="1.0"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleX" To="1.02" Duration="0:0:0.14">
+                                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleY" To="1.02" Duration="0:0:0.14">
+                                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="sheen" Property="Opacity" Value="1.0"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleX" To="0.97" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleY" To="0.97" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.12">
+                                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="contentScale" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.12">
+                                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Soft blue-tinted glass button -->
+        <Style x:Key="TintedButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#007AFF"/>
+            <Setter Property="Background" Value="#EEF6FF"/>
+            <Setter Property="BorderBrush" Value="#D7E8FF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="fill"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="11">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="fill" Property="Background" Value="#E2EFFF"/>
+                                <Setter TargetName="fill" Property="BorderBrush" Value="#BFD9FF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="fill" Property="Background" Value="#D5E8FF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Segmented control: selected (glossy blue) / idle (frosted white) -->
+        <Style x:Key="SegmentSelectedButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border CornerRadius="10">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#4CA6FF" Offset="0"/>
+                                        <GradientStop Color="#007AFF" Offset="0.6"/>
+                                        <GradientStop Color="#0069D9" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#007AFF" BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.28"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border IsHitTestVisible="False" CornerRadius="10" Margin="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#59FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#00FFFFFF" Offset="0.55"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SegmentButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#3C3C43"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="fill"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="fill" Property="Background" Value="#F2F2F7"/>
+                                <Setter Property="Foreground" Value="#1C1C1E"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="fill" Property="Background" Value="#E8E8ED"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- iOS slider -->
+        <Style x:Key="AppleSliderThumb" TargetType="{x:Type Thumb}">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border x:Name="thumbBorder"
+                                Width="22" Height="22"
+                                CornerRadius="11"
+                                Background="#FFFFFF"
+                                BorderBrush="#D9D9DE"
+                                BorderThickness="0.5">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" BlurRadius="5" ShadowDepth="1.5" Opacity="0.22"/>
+                            </Border.Effect>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="thumbBorder" Property="Background" Value="#F7F7FA"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="thumbBorder" Property="Background" Value="#EDEDF2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="AppleSlider" TargetType="{x:Type Slider}">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="IsMoveToPointEnabled" Value="True"/>
+            <Setter Property="SmallChange" Value="1"/>
+            <Setter Property="LargeChange" Value="10"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Slider}">
+                        <Grid VerticalAlignment="Center">
+                            <Border Height="4" CornerRadius="2" Background="#E5E5EA" VerticalAlignment="Center"/>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate>
+                                                <Border Height="4" CornerRadius="2" Background="#007AFF" VerticalAlignment="Center"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate>
+                                                <Border Height="4" Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource AppleSliderThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- iOS toggle switch -->
+        <Style x:Key="AppleSwitch" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#3C3C43"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter Grid.Column="0"
+                                              Margin="0,0,14,0"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              TextElement.FontSize="{TemplateBinding FontSize}"/>
+                            <Grid Grid.Column="1" Width="46" Height="28" VerticalAlignment="Center">
+                                <Border x:Name="track" CornerRadius="14" Background="#E9E9EB"/>
+                                <Ellipse x:Name="knob"
+                                         Width="24" Height="24"
+                                         Fill="#FFFFFF"
+                                         HorizontalAlignment="Left"
+                                         Margin="2,0,0,0">
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1.5" Direction="270" Opacity="0.25"/>
+                                    </Ellipse.Effect>
+                                </Ellipse>
+                            </Grid>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="track" Property="Background" Value="#34C759"/>
+                                <Setter TargetName="knob" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="knob" Property="Margin" Value="0,0,2,0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="track" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="track" Property="BorderBrush" Value="#007AFF"/>
+                                <Setter TargetName="track" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Inset rounded text field -->
+        <Style x:Key="AppleTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#1C1C1E"/>
+            <Setter Property="Background" Value="#F7F7FA"/>
+            <Setter Property="BorderBrush" Value="#E2E2E8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CaretBrush" Value="#007AFF"/>
+            <Setter Property="SelectionBrush" Value="#66007AFF"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="field"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="12">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="field" Property="Background" Value="#FFFFFF"/>
+                                <Setter TargetName="field" Property="BorderBrush" Value="#D1D1D6"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="field" Property="Background" Value="#FFFFFF"/>
+                                <Setter TargetName="field" Property="BorderBrush" Value="#007AFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Frosted rounded combo box -->
+        <Style x:Key="AppleComboBox" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#1C1C1E"/>
+            <Setter Property="Background" Value="#F7F7FA"/>
+            <Setter Property="BorderBrush" Value="#E2E2E8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="DropDownToggle"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent"/>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Border x:Name="field"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="12"
+                                    IsHitTestVisible="False">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter Grid.Column="0"
+                                                      Margin="{TemplateBinding Padding}"
+                                                      VerticalAlignment="Center"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"/>
+                                    <Path Grid.Column="1"
+                                          Data="M 0 0 L 4 4 L 8 0"
+                                          Stroke="#8E8E93"
+                                          StrokeThickness="1.6"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          VerticalAlignment="Center"
+                                          Margin="0,1,14,0"/>
+                                </Grid>
+                            </Border>
+
+                            <Popup x:Name="PART_Popup"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Grid MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                      MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <Border Background="#FFFFFF"
+                                            BorderBrush="#E5E5EA"
+                                            BorderThickness="1"
+                                            CornerRadius="14"
+                                            Margin="0,6,0,0"
+                                            Padding="6">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#000000" BlurRadius="22" ShadowDepth="6" Direction="270" Opacity="0.18"/>
+                                        </Border.Effect>
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="field" Property="Background" Value="#FFFFFF"/>
+                                <Setter TargetName="field" Property="BorderBrush" Value="#D1D1D6"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="field" Property="Background" Value="#FFFFFF"/>
+                                <Setter TargetName="field" Property="BorderBrush" Value="#007AFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#1C1C1E"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="row"
+                                Background="Transparent"
+                                CornerRadius="9"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="0,1">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="row" Property="Background" Value="#F2F2F7"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="row" Property="Background" Value="#EAF3FF"/>
+                                <Setter Property="Foreground" Value="#007AFF"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Slim frosted scrollbar -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent" Width="8">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate>
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb MinHeight="24">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border CornerRadius="4" Background="#C7C7CC" Margin="1,2"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate>
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- ========================================================= -->
+    <!-- LIQUID GLASS SHELL                                        -->
+    <!-- ========================================================= -->
+    <Border Margin="14"
+            CornerRadius="28"
+            BorderThickness="1"
+            BorderBrush="#DDE0E6">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0.6,1">
+                <GradientStop Color="#FDFDFE" Offset="0"/>
+                <GradientStop Color="#F2F2F7" Offset="0.5"/>
+                <GradientStop Color="#ECEDF3" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+        <Border.Effect>
+            <DropShadowEffect Color="#1B1F33" BlurRadius="46" ShadowDepth="14" Direction="270" Opacity="0.26"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Ambient color bloom behind the glass -->
+            <Ellipse Grid.RowSpan="3"
+                     Width="340" Height="340"
+                     HorizontalAlignment="Right"
+                     VerticalAlignment="Top"
+                     Margin="0,50,-130,0"
+                     IsHitTestVisible="False">
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#38007AFF" Offset="0"/>
+                        <GradientStop Color="#00007AFF" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Grid.RowSpan="3"
+                     Width="300" Height="300"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Bottom"
+                     Margin="-120,0,0,70"
+                     IsHitTestVisible="False">
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#26AF52DE" Offset="0"/>
+                        <GradientStop Color="#00AF52DE" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <!-- ================================================= -->
+            <!-- NAVIGATION BAR: clean white, large title          -->
+            <!-- ================================================= -->
+            <Border Grid.Row="0"
+                    Background="#FFFFFF"
+                    CornerRadius="28,28,0,0"
+                    MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid>
+                    <Grid Margin="28,22,22,18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                Width="48" Height="48"
+                                CornerRadius="15">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#63B3FF" Offset="0"/>
+                                    <GradientStop Color="#007AFF" Offset="0.7"/>
+                                    <GradientStop Color="#0062CC" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#007AFF" BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.35"/>
+                            </Border.Effect>
+                            <TextBlock Text="♫"
+                                       FontSize="22"
+                                       Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Margin="0,-2,0,0"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Settings"
+                                       FontSize="28"
+                                       FontWeight="Bold"
+                                       Foreground="#000000"/>
+                            <TextBlock Text="Lmen v2 · Ambient glow and sound"
+                                       FontSize="12"
+                                       Foreground="#8E8E93"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2"
+                                Style="{StaticResource CircleGlassButton}"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Margin="0,2,0,0"
+                                Click="Close_Click"
+                                ToolTip="Close settings">
+                            <TextBlock Text="&#xE8BB;"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                       FontSize="10"/>
+                        </Button>
+                    </Grid>
+
+                    <Border Height="1" VerticalAlignment="Bottom" Background="#E9E9EE"/>
+                </Grid>
+            </Border>
+
+            <!-- ================================================= -->
+            <!-- CONTENT                                           -->
+            <!-- ================================================= -->
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          PanningMode="VerticalOnly"
+                          Margin="0,0,6,0">
+                <StackPanel Margin="24,16,18,20">
+
+                    <!-- DISPLAY MODE -->
+                    <TextBlock Text="DISPLAY MODE" Style="{StaticResource SectionLabel}"/>
+                    <Border Background="#FFFFFF"
+                            BorderBrush="#E6E6EB"
+                            BorderThickness="1"
+                            CornerRadius="14"
+                            Padding="4"
+                            Margin="0,0,0,20">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#23253A" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.07"/>
+                        </Border.Effect>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button x:Name="FullscreenModeButton"
+                                    Grid.Column="0"
+                                    Style="{StaticResource SegmentSelectedButton}"
+                                    Click="FullscreenMode_Click"
+                                    ToolTip="Show the fullscreen ambient visualizer">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE740;"
+                                               FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                               FontSize="13"
+                                               Margin="0,0,7,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Fullscreen"
+                                               FontSize="12.5"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button x:Name="OverlayModeButton"
+                                    Grid.Column="1"
+                                    Style="{StaticResource SegmentButton}"
+                                    Click="OverlayMode_Click"
+                                    ToolTip="Show the click-through desktop edge overlay">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7F4;"
+                                               FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                               FontSize="13"
+                                               Margin="0,0,7,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Desktop Overlay"
+                                               FontSize="12.5"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- GRAPHICS -->
+                    <TextBlock Text="GRAPHICS" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
+                        <StackPanel>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Style="{StaticResource IconTile}" Background="#EAF3FF">
+                                        <TextBlock Text="GPU"
+                                                   FontSize="10"
+                                                   FontWeight="Bold"
+                                                   Foreground="#007AFF"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Graphics Adapter"
+                                                   FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#000000"/>
+                                        <TextBlock Text="Discrete GPU priority"
+                                                   FontSize="11"
+                                                   Foreground="#8E8E93"
+                                                   Margin="0,1,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <Border HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Background="#EAF9EF"
+                                        CornerRadius="999"
+                                        Padding="9,4">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="6" Height="6"
+                                                 Fill="#34C759"
+                                                 Margin="0,0,5,0"
+                                                 VerticalAlignment="Center"/>
+                                        <TextBlock Text="High Performance"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#1E8B3E"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <TextBlock x:Name="ActiveGpuText"
+                                       Text="Detecting Discrete GPU..."
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="#1C1C1E"
+                                       TextWrapping="Wrap"
+                                       Margin="0,14,0,4"/>
+
+                            <TextBlock Text="First priority is locked to standalone discrete GPU (RTX / discrete) over integrated graphics."
+                                       FontSize="11"
+                                       Foreground="#8E8E93"
+                                       TextWrapping="Wrap"
+                                       LineHeight="16"
+                                       Margin="0,0,0,14"/>
+
+                            <Button Style="{StaticResource TintedButton}"
+                                    HorizontalAlignment="Left"
+                                    Click="OpenWindowsGraphicsSettings_Click"
+                                    ToolTip="Verify and manage Windows OS High Performance GPU assignments">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE713;"
+                                               FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                               FontSize="12"
+                                               Margin="0,0,7,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Open Windows Graphics Settings"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- AUDIO -->
+                    <TextBlock Text="AUDIO &amp; SYSTEM VOLUME" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource IconTile}">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#5BE47E" Offset="0"/>
+                                            <GradientStop Color="#34C759" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <TextBlock Text="&#xE767;"
+                                               FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                               FontSize="15"
+                                               Foreground="#FFFFFF"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Master Volume"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="#000000"/>
+                                    <TextBlock Text="System output level"
+                                               FontSize="11"
+                                               Foreground="#8E8E93"
+                                               Margin="0,1,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Grid Margin="0,14,0,2">
+                                <TextBlock Text="Volume"
+                                           FontSize="13"
+                                           FontWeight="Medium"
+                                           Foreground="#1C1C1E"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SettingsVolumeText"
+                                           Text="70%"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="#007AFF"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Slider x:Name="SettingsVolumeSlider"
+                                    Style="{StaticResource AppleSlider}"
+                                    Minimum="0" Maximum="100" Value="70"
+                                    ValueChanged="SettingsVolumeSlider_ValueChanged"/>
+
+                            <Border Height="1" Background="#EFEFF4" Margin="0,12,0,14"/>
+
+                            <CheckBox x:Name="LyricsBeatEffectsCheckBox"
+                                      Style="{StaticResource AppleSwitch}"
+                                      Content="Enable On-Beat Glow &amp; Pulse Effects for Timed Lyrics"
+                                      Checked="LyricsBeatEffects_Checked"
+                                      Unchecked="LyricsBeatEffects_Unchecked"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- GLOW & LIGHTING -->
+                    <TextBlock Text="GLOW &amp; LIGHTING" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Text="Glow Brightness"
+                                           FontSize="12.5"
+                                           FontWeight="Medium"
+                                           Foreground="#1C1C1E"/>
+                                <TextBlock x:Name="BrightnessText"
+                                           Text="85%"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="#007AFF"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Slider x:Name="BrightnessSlider"
+                                    Style="{StaticResource AppleSlider}"
+                                    Minimum="20" Maximum="150" Value="85"
+                                    Margin="0,0,0,14"
+                                    ValueChanged="BrightnessSlider_ValueChanged"/>
+
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Text="Backdrop Ambient Brightness (TV blurred cover)"
+                                           FontSize="12.5"
+                                           FontWeight="Medium"
+                                           Foreground="#1C1C1E"/>
+                                <TextBlock x:Name="BackdropText"
+                                           Text="70%"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="#007AFF"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Slider x:Name="BackdropSlider"
+                                    Style="{StaticResource AppleSlider}"
+                                    Minimum="0" Maximum="100" Value="70"
+                                    Margin="0,0,0,14"
+                                    ValueChanged="BackdropSlider_ValueChanged"/>
+
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Text="Glow Spread (Depth into screen)"
+                                           FontSize="12.5"
+                                           FontWeight="Medium"
+                                           Foreground="#1C1C1E"/>
+                                <TextBlock x:Name="SpreadText"
+                                           Text="120 px"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="#007AFF"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Slider x:Name="SpreadSlider"
+                                    Style="{StaticResource AppleSlider}"
+                                    Minimum="50" Maximum="260" Value="120"
+                                    Margin="0,0,0,14"
+                                    ValueChanged="SpreadSlider_ValueChanged"/>
+
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Text="Rotation Speed (0 = Paused / Static)"
+                                           FontSize="12.5"
+                                           FontWeight="Medium"
+                                           Foreground="#1C1C1E"/>
+                                <TextBlock x:Name="SpeedText"
+                                           Text="1.0x"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="#007AFF"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Slider x:Name="SpeedSlider"
+                                    Style="{StaticResource AppleSlider}"
+                                    Minimum="0" Maximum="250" Value="100"
+                                    Margin="0,0,0,14"
+                                    ValueChanged="SpeedSlider_ValueChanged"/>
+
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Text="Music Reactivity (WASAPI audio beats)"
+                                           FontSize="12.5"
+                                           FontWeight="Medium"
+                                           Foreground="#1C1C1E"/>
+                                <TextBlock x:Name="ReactivityText"
+                                           Text="1.0x"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="#007AFF"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Slider x:Name="ReactivitySlider"
+                                    Style="{StaticResource AppleSlider}"
+                                    Minimum="0" Maximum="200" Value="100"
+                                    Margin="0,0,0,14"
+                                    ValueChanged="ReactivitySlider_ValueChanged"/>
+
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Text="Breathing Effect Amount"
+                                           FontSize="12.5"
+                                           FontWeight="Medium"
+                                           Foreground="#1C1C1E"/>
+                                <TextBlock x:Name="BreathingText"
+                                           Text="70%"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="#007AFF"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Slider x:Name="BreathingSlider"
+                                    Style="{StaticResource AppleSlider}"
+                                    Minimum="0" Maximum="100" Value="70"
+                                    ValueChanged="BreathingSlider_ValueChanged"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- LYRICS -->
+                    <TextBlock Text="LYRICS &amp; SOURCES" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource IconTile}">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#B18CFF" Offset="0"/>
+                                            <GradientStop Color="#7A5AF8" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <TextBlock Text="Aa"
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="#FFFFFF"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Translation &amp; Sources"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="#000000"/>
+                                    <TextBlock Text="Lyrics language and API access"
+                                               FontSize="11"
+                                               Foreground="#8E8E93"
+                                               Margin="0,1,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Text="Translate Lyrics Into"
+                                       FontSize="13"
+                                       FontWeight="Medium"
+                                       Foreground="#1C1C1E"
+                                       Margin="0,14,0,6"/>
+                            <ComboBox x:Name="LyricsLanguageComboBox"
+                                      Style="{StaticResource AppleComboBox}"
+                                      SelectionChanged="LyricsLanguageComboBox_SelectionChanged"/>
+
+                            <TextBlock Text="PaxSenix API Key (optional)"
+                                       FontSize="13"
+                                       FontWeight="Medium"
+                                       Foreground="#1C1C1E"
+                                       Margin="0,14,0,2"/>
+                            <TextBlock Text="Paste the token from paxsenix.com to unlock the Spotify and Musixmatch lyric routes. Everything else works without a key."
+                                       FontSize="11"
+                                       Foreground="#8E8E93"
+                                       TextWrapping="Wrap"
+                                       LineHeight="16"
+                                       Margin="0,0,0,8"/>
+                            <TextBox x:Name="PaxSenixApiKeyBox"
+                                     Style="{StaticResource AppleTextBox}"
+                                     TextChanged="PaxSenixApiKeyBox_TextChanged"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ================================================= -->
+            <!-- FOOTER                                            -->
+            <!-- ================================================= -->
+            <Border Grid.Row="2" Background="#FFFFFF" CornerRadius="0,0,28,28">
+                <Grid>
+                    <Border Height="1" VerticalAlignment="Top" Background="#E9E9EE"/>
+                    <Grid Margin="28,14,22,20">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7"
+                                     Fill="#34C759"
+                                     Margin="0,0,7,0"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock Text="Changes apply in real time"
+                                       FontSize="11.5"
+                                       Foreground="#8E8E93"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Button Style="{StaticResource PrimaryPillButton}"
+                                Content="Done"
+                                Padding="26,10"
+                                HorizontalAlignment="Right"
+                                Click="Close_Click"
+                                ToolTip="Close settings"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
