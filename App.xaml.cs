@@ -224,6 +224,15 @@ namespace LmenV2
             {
                 Log("ShowSettings called");
                 var settings = new SettingsWindow();
+                if (_fullscreenWindow != null && _fullscreenWindow.IsVisible)
+                {
+                    settings.Owner = _fullscreenWindow;
+                }
+                else if (_overlayWindow != null && _overlayWindow.IsVisible)
+                {
+                    settings.Owner = _overlayWindow;
+                }
+                settings.Topmost = true;
                 settings.ShowDialog();
             });
         }

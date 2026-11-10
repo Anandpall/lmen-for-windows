@@ -28,11 +28,24 @@ namespace LmenV2.Services
         {
             string cleanWantTitle = MotionArtworkService.NormalizeForCanvasMatch(wantTitle);
             string cleanWantArtist = MotionArtworkService.NormalizeForCanvasMatch(wantArtist);
+            string cleanWantAlbum = !string.IsNullOrWhiteSpace(wantAlbum) ? MotionArtworkService.NormalizeForCanvasMatch(wantAlbum) : string.Empty;
 
-            if (Title != null && !string.IsNullOrWhiteSpace(cleanWantTitle))
+            if (!string.IsNullOrWhiteSpace(cleanWantTitle))
             {
-                string normTitle = MotionArtworkService.NormalizeForCanvasMatch(Title);
-                if (normTitle != cleanWantTitle && !normTitle.Contains(cleanWantTitle) && !cleanWantTitle.Contains(normTitle))
+                string normTitle = !string.IsNullOrWhiteSpace(Title) ? MotionArtworkService.NormalizeForCanvasMatch(Title) : string.Empty;
+                string normAlbum = !string.IsNullOrWhiteSpace(Album) ? MotionArtworkService.NormalizeForCanvasMatch(Album) : string.Empty;
+
+                bool titleMatches = !string.IsNullOrWhiteSpace(normTitle) &&
+                    (normTitle == cleanWantTitle || normTitle.Contains(cleanWantTitle) || cleanWantTitle.Contains(normTitle));
+
+                bool albumMatches = (!string.IsNullOrWhiteSpace(cleanWantAlbum) && !string.IsNullOrWhiteSpace(normAlbum) &&
+                                     (normAlbum == cleanWantAlbum || normAlbum.Contains(cleanWantAlbum) || cleanWantAlbum.Contains(normAlbum))) ||
+                                    (!string.IsNullOrWhiteSpace(cleanWantAlbum) && !string.IsNullOrWhiteSpace(normTitle) &&
+                                     (normTitle == cleanWantAlbum || normTitle.Contains(cleanWantAlbum) || cleanWantAlbum.Contains(normTitle))) ||
+                                    (!string.IsNullOrWhiteSpace(normAlbum) &&
+                                     (normAlbum == cleanWantTitle || normAlbum.Contains(cleanWantTitle) || cleanWantTitle.Contains(normAlbum)));
+
+                if (!titleMatches && !albumMatches)
                     return false;
             }
 
@@ -40,7 +53,9 @@ namespace LmenV2.Services
             var ourArtists = MotionArtworkService.SplitCanvasArtists(Artist ?? string.Empty);
             if (wantedArtists.Count > 0 && ourArtists.Count > 0)
             {
-                if (!wantedArtists.All(w => ourArtists.Any(c => c == w || c.Contains(w) || w.Contains(c))))
+                bool artistMatch = wantedArtists.Any(w => ourArtists.Any(c => c == w || c.Contains(w) || w.Contains(c))) ||
+                                   ourArtists.Any(c => wantedArtists.Any(w => w == c || w.Contains(c) || c.Contains(w)));
+                if (!artistMatch)
                     return false;
             }
 
@@ -50,14 +65,16 @@ namespace LmenV2.Services
 
     /// <summary>
     /// MotionArtworkService: Discovers and caches high-definition looping motion artwork (animated album covers / canvas)
-    /// across Apple Music (motion square videos / editorialVideo), Tidal (1280x1280 60fps video covers),
-    /// and the community canvas library. Ported and enhanced from BitChord's motion canvas architecture.
+    /// across Apple Music (motion square videos / editorialVideo resolved to direct MP4), Tidal (1280x1280 60fps video covers),
+    /// the community canvas library, and Spotify Canvas. Ported and enhanced from BitChord's motion canvas architecture.
     /// </summary>
     public sealed class MotionArtworkService
     {
         private static readonly Lazy<MotionArtworkService> _instance =
             new Lazy<MotionArtworkService>(() => new MotionArtworkService());
         public static MotionArtworkService Instance => _instance.Value;
+
+        public event Action<string, string>? VideoCached; // (string videoUrl, string localFilePath)
 
         private static readonly HttpClient _httpClient = new HttpClient(new SocketsHttpHandler
         {
@@ -159,7 +176,13 @@ namespace LmenV2.Services
             string albumTitle = "",
             CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(title) || title.Equals("Ready to Play", StringComparison.OrdinalIgnoreCase))
+            if (!SettingsService.Instance.EnableMotionArtwork)
+                return null;
+
+            if (string.IsNullOrWhiteSpace(title) ||
+                title.Equals("Ready to Play", StringComparison.OrdinalIgnoreCase) ||
+                title.Equals("Unknown Track", StringComparison.OrdinalIgnoreCase) ||
+                title.Equals("No Track Playing", StringComparison.OrdinalIgnoreCase))
                 return null;
 
             string cleanTitle = HighResArtworkService.CleanTitle(title, out string? extractedArtist);
@@ -182,57 +205,107 @@ namespace LmenV2.Services
                     return cached;
 
                 MotionArtworkResult? result = null;
-
-                // 1. Try Apple Music Motion Catalog (Square 1x1 master motion videos)
-                try
-                {
-                    result = await AppleMusicProvider.SearchAsync(cleanTitle, cleanArtist, cleanAlbum, ct);
-                    if (result != null && !result.Matches(cleanTitle, cleanArtist))
-                        result = null;
-                }
-                catch { }
-
-                // 2. Try Tidal Video Covers (1280x1280 60fps CDN MP4s)
-                if (result == null)
+                bool prioritizeSpotify = SettingsService.Instance.PrioritizeSpotifyCanvas;
+                string spDc = SettingsService.Instance.SpotifySpDcCookie;
+                if (string.IsNullOrWhiteSpace(spDc))
                 {
                     try
                     {
-                        result = await TidalProvider.SearchAsync(cleanTitle, cleanArtist, cleanAlbum, ct);
-                        if (result != null && !result.Matches(cleanTitle, cleanArtist))
+                        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\JavaSoft\Prefs\com.music.bitchord.desktop");
+                        if (key != null)
+                        {
+                            var regVal = key.GetValue("spotify_spdc_token") as string;
+                            if (!string.IsNullOrWhiteSpace(regVal))
+                            {
+                                spDc = regVal.Trim();
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // Optional: Prioritize Spotify Canvas if requested and cookie is available
+                if (prioritizeSpotify && !string.IsNullOrWhiteSpace(spDc))
+                {
+                    try
+                    {
+                        result = await SpotifyProvider.SearchAsync(cleanTitle, cleanArtist, cleanAlbum, spDc, ct);
+                        if (result != null && !result.Matches(cleanTitle, cleanArtist, cleanAlbum))
                             result = null;
                     }
                     catch { }
                 }
 
-                // 3. Try Community Curated Canvas Index
+                // 1. Try Community Curated Canvas Index first (instant in-memory lookup for curated 60fps canvases)
                 if (result == null)
                 {
                     try
                     {
                         result = await CommunityProvider.SearchAsync(cleanTitle, cleanArtist, cleanAlbum, ct);
+                        if (result != null && !result.Matches(cleanTitle, cleanArtist, cleanAlbum))
+                            result = null;
+                    }
+                    catch { }
+                }
+
+                // 2. Try Apple Music Motion Catalog (Square 1x1 master motion videos resolved to direct MP4)
+                if (result == null)
+                {
+                    try
+                    {
+                        result = await AppleMusicProvider.SearchAsync(cleanTitle, cleanArtist, cleanAlbum, ct);
+                        if (result != null && !result.Matches(cleanTitle, cleanArtist, cleanAlbum))
+                            result = null;
+                    }
+                    catch { }
+                }
+
+                // 3. Try Tidal Video Covers (1280x1280 60fps CDN MP4s)
+                if (result == null)
+                {
+                    try
+                    {
+                        result = await TidalProvider.SearchAsync(cleanTitle, cleanArtist, cleanAlbum, ct);
+                        if (result != null && !result.Matches(cleanTitle, cleanArtist, cleanAlbum))
+                            result = null;
+                    }
+                    catch { }
+                }
+
+                // 4. Try Spotify Canvas (as fallback if not prioritized)
+                if (result == null && !prioritizeSpotify && !string.IsNullOrWhiteSpace(spDc))
+                {
+                    try
+                    {
+                        result = await SpotifyProvider.SearchAsync(cleanTitle, cleanArtist, cleanAlbum, spDc, ct);
+                        if (result != null && !result.Matches(cleanTitle, cleanArtist, cleanAlbum))
+                            result = null;
                     }
                     catch { }
                 }
 
                 if (result != null && !string.IsNullOrWhiteSpace(result.Url))
                 {
+                    App.Log($"[MotionArtwork] Found motion artwork from {result.Source}: {result.Url}");
                     string? existing = GetExistingLocalCachedVideo(result.Url);
                     if (existing != null)
                     {
                         result.LocalFilePath = existing;
+                        App.Log($"[MotionArtwork] Using existing disk cache: {existing}");
                     }
                     else
                     {
-                        // Trigger background download so playback starts immediately without waiting
-                        string videoUrl = result.Url;
-                        _ = Task.Run(async () =>
+                        // Download to local cache so WPF MediaElement plays the file directly from disk
+                        // with 100% native hardware acceleration and zero network/streaming failures.
+                        try
                         {
-                            try
-                            {
-                                await EnsureLocalCachedVideoAsync(videoUrl, CancellationToken.None);
-                            }
-                            catch { }
-                        });
+                            result.LocalFilePath = await EnsureLocalCachedVideoAsync(result.Url, ct);
+                            App.Log($"[MotionArtwork] Downloaded and cached to: {result.LocalFilePath}");
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Log($"[MotionArtwork] Cache download error: {ex.Message}");
+                        }
                     }
                 }
 
@@ -256,8 +329,7 @@ namespace LmenV2.Services
                 using var sha256 = SHA256.Create();
                 byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(url));
                 string hex = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-                string extension = url.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase) ? ".m3u8" : ".mp4";
-                string targetPath = Path.Combine(_cacheDirectory, $"{hex}{extension}");
+                string targetPath = Path.Combine(_cacheDirectory, $"{hex}.mp4");
 
                 if (File.Exists(targetPath) && new FileInfo(targetPath).Length > 1024)
                     return targetPath;
@@ -270,24 +342,45 @@ namespace LmenV2.Services
         {
             try
             {
-                using var sha256 = SHA256.Create();
-                byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(url));
-                string hex = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-                string extension = url.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase) ? ".m3u8" : ".mp4";
-                string targetPath = Path.Combine(_cacheDirectory, $"{hex}{extension}");
-
-                if (File.Exists(targetPath))
+                string downloadUrl = url;
+                if (downloadUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
                 {
-                    var fileInfo = new FileInfo(targetPath);
-                    if (fileInfo.Length > 1024)
-                        return targetPath;
+                    string? resolved = await AppleMusicProvider.ResolveMp4FromM3u8Async(downloadUrl, ct);
+                    if (!string.IsNullOrEmpty(resolved) && !resolved.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
+                    {
+                        downloadUrl = resolved;
+                    }
                 }
 
-                // If it is an HLS manifest (.m3u8), we stream directly rather than saving single playlist file
-                if (extension == ".m3u8")
+                using var sha256 = SHA256.Create();
+                // Check cache by both original URL and resolved URL
+                byte[] hashOrig = sha256.ComputeHash(Encoding.UTF8.GetBytes(url));
+                string hexOrig = BitConverter.ToString(hashOrig).Replace("-", "").ToLowerInvariant();
+                string targetPath = Path.Combine(_cacheDirectory, $"{hexOrig}.mp4");
+
+                if (File.Exists(targetPath) && new FileInfo(targetPath).Length > 1024)
+                {
+                    VideoCached?.Invoke(url, targetPath);
+                    return targetPath;
+                }
+
+                if (downloadUrl != url)
+                {
+                    byte[] hashResolved = sha256.ComputeHash(Encoding.UTF8.GetBytes(downloadUrl));
+                    string hexResolved = BitConverter.ToString(hashResolved).Replace("-", "").ToLowerInvariant();
+                    string resolvedPath = Path.Combine(_cacheDirectory, $"{hexResolved}.mp4");
+                    if (File.Exists(resolvedPath) && new FileInfo(resolvedPath).Length > 1024)
+                    {
+                        VideoCached?.Invoke(url, resolvedPath);
+                        return resolvedPath;
+                    }
+                }
+
+                // If still an unresolved m3u8 playlist after attempt, we cannot cache it as a single mp4
+                if (downloadUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
                     return null;
 
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                using var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
                 request.Headers.UserAgent.ParseAdd(UserAgent);
                 request.Headers.Add("Accept", "*/*");
 
@@ -307,6 +400,8 @@ namespace LmenV2.Services
                     if (File.Exists(targetPath))
                         File.Delete(targetPath);
                     File.Move(tempPath, targetPath);
+
+                    VideoCached?.Invoke(url, targetPath);
                     return targetPath;
                 }
                 else
@@ -344,6 +439,94 @@ namespace LmenV2.Services
                 }
                 catch { }
                 return "us";
+            }
+
+            public static async Task<string?> ResolveMp4FromM3u8Async(string m3u8Url, CancellationToken ct)
+            {
+                if (string.IsNullOrWhiteSpace(m3u8Url)) return null;
+                if (m3u8Url.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || m3u8Url.Contains(".mp4?"))
+                    return m3u8Url;
+
+                try
+                {
+                    using var req = new HttpRequestMessage(HttpMethod.Get, m3u8Url);
+                    req.Headers.UserAgent.ParseAdd(UserAgent);
+                    using var resp = await _httpClient.SendAsync(req, ct);
+                    if (!resp.IsSuccessStatusCode) return m3u8Url;
+
+                    string m3u8Text = await resp.Content.ReadAsStringAsync(ct);
+
+                    // Case A: Playlist directly contains #EXT-X-MAP:URI="...mp4"
+                    var directMapMatch = Regex.Match(m3u8Text, @"#EXT-X-MAP:URI=""([^""]+)""");
+                    if (directMapMatch.Success)
+                    {
+                        string rel = directMapMatch.Groups[1].Value;
+                        var baseUri = new Uri(m3u8Url);
+                        return new Uri(baseUri, rel).ToString();
+                    }
+
+                    // Case B: Master playlist with variant streams
+                    // Prioritize avc1 (H.264) codec which works natively on 100% of Windows installations without requiring external HEVC codecs
+                    var streamMatches = Regex.Matches(m3u8Text, @"#EXT-X-STREAM-INF:([^\r\n]+)[\r\n]+([^\r\n]+)");
+                    if (streamMatches.Count > 0)
+                    {
+                        string? bestVariantUrl = null;
+                        int bestScore = -1;
+
+                        foreach (Match match in streamMatches)
+                        {
+                            string info = match.Groups[1].Value;
+                            string streamUriStr = match.Groups[2].Value.Trim();
+                            if (string.IsNullOrWhiteSpace(streamUriStr)) continue;
+
+                            int score = 0;
+                            if (info.Contains("avc1", StringComparison.OrdinalIgnoreCase))
+                                score += 10000;
+
+                            var resMatch = Regex.Match(info, @"RESOLUTION=(\d+)x(\d+)");
+                            if (resMatch.Success && int.TryParse(resMatch.Groups[1].Value, out int width))
+                            {
+                                score += Math.Min(width, 1080);
+                            }
+
+                            if (score > bestScore)
+                            {
+                                bestScore = score;
+                                var baseUri = new Uri(m3u8Url);
+                                bestVariantUrl = new Uri(baseUri, streamUriStr).ToString();
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(bestVariantUrl))
+                        {
+                            using var vReq = new HttpRequestMessage(HttpMethod.Get, bestVariantUrl);
+                            vReq.Headers.UserAgent.ParseAdd(UserAgent);
+                            using var vResp = await _httpClient.SendAsync(vReq, ct);
+                            if (vResp.IsSuccessStatusCode)
+                            {
+                                string vText = await vResp.Content.ReadAsStringAsync(ct);
+                                var mapMatch = Regex.Match(vText, @"#EXT-X-MAP:URI=""([^""]+)""");
+                                if (mapMatch.Success)
+                                {
+                                    string rel = mapMatch.Groups[1].Value;
+                                    var vBaseUri = new Uri(bestVariantUrl);
+                                    return new Uri(vBaseUri, rel).ToString();
+                                }
+
+                                var mp4Line = vText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                                    .FirstOrDefault(line => !line.StartsWith("#") && (line.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || line.Contains(".mp4?")));
+                                if (!string.IsNullOrEmpty(mp4Line))
+                                {
+                                    var vBaseUri = new Uri(bestVariantUrl);
+                                    return new Uri(vBaseUri, mp4Line.Trim()).ToString();
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                return m3u8Url;
             }
 
             public static async Task<MotionArtworkResult?> SearchAsync(string title, string artist, string? album, CancellationToken ct)
@@ -399,10 +582,15 @@ namespace LmenV2.Services
                         var urls = ExtractMotionUrls(editorialVideo);
                         if (urls != null)
                         {
+                            string resolvedPrimary = await ResolveMp4FromM3u8Async(urls.Value.primary, ct) ?? urls.Value.primary;
+                            string? resolvedAlternate = !string.IsNullOrEmpty(urls.Value.alternate)
+                                ? await ResolveMp4FromM3u8Async(urls.Value.alternate, ct)
+                                : null;
+
                             return new MotionArtworkResult
                             {
-                                Url = urls.Value.primary,
-                                FallbackUrl = urls.Value.alternate,
+                                Url = resolvedPrimary,
+                                FallbackUrl = resolvedAlternate,
                                 Title = songName,
                                 Artist = songArtist,
                                 Album = albumName,
@@ -418,12 +606,29 @@ namespace LmenV2.Services
                         var albumResult = await FetchAlbumAsync(albumId, token, songName, songArtist, ct);
                         if (albumResult != null) return albumResult;
                     }
+
+                    // If albumId lookup returned null or 404, but we have a non-compilation albumName from song:
+                    if (!string.IsNullOrWhiteSpace(albumName) && !IsCompilation(albumName))
+                    {
+                        var albumResult = await SearchAlbumAsync(albumName, songArtist ?? artist, token, ct);
+                        if (albumResult != null)
+                        {
+                            albumResult.Title = songName ?? albumResult.Title;
+                            return albumResult;
+                        }
+                    }
                 }
 
                 // If song search had no motion video, search album directly
                 if (!string.IsNullOrWhiteSpace(album))
                 {
                     var albumResult = await SearchAlbumAsync(album, artist, token, ct);
+                    if (albumResult != null) return albumResult;
+                }
+                else
+                {
+                    // Fallback album search using song title (for eponymous releases, singles, or album titles matching track)
+                    var albumResult = await SearchAlbumAsync(title, artist, token, ct);
                     if (albumResult != null) return albumResult;
                 }
 
@@ -453,17 +658,35 @@ namespace LmenV2.Services
                     string? name = attrs.TryGetProperty("name", out var n) ? n.GetString() : null;
                     if (name != null && IsCompilation(name)) continue;
 
+                    string? recArtist = attrs.TryGetProperty("artistName", out var a) ? a.GetString() : null;
+                    if (!string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(recArtist))
+                    {
+                        var wanted = SplitCanvasArtists(artist);
+                        var credited = SplitCanvasArtists(recArtist);
+                        if (wanted.Count > 0 && credited.Count > 0)
+                        {
+                            bool artistMatches = wanted.Any(w => credited.Any(c => c == w || c.Contains(w) || w.Contains(c))) ||
+                                                 credited.Any(c => wanted.Any(w => w == c || w.Contains(c) || c.Contains(w)));
+                            if (!artistMatches) continue;
+                        }
+                    }
+
                     if (attrs.TryGetProperty("editorialVideo", out var video))
                     {
                         var urls = ExtractMotionUrls(video);
                         if (urls != null)
                         {
+                            string resolvedPrimary = await ResolveMp4FromM3u8Async(urls.Value.primary, ct) ?? urls.Value.primary;
+                            string? resolvedAlternate = !string.IsNullOrEmpty(urls.Value.alternate)
+                                ? await ResolveMp4FromM3u8Async(urls.Value.alternate, ct)
+                                : null;
+
                             return new MotionArtworkResult
                             {
-                                Url = urls.Value.primary,
-                                FallbackUrl = urls.Value.alternate,
+                                Url = resolvedPrimary,
+                                FallbackUrl = resolvedAlternate,
                                 Title = name,
-                                Artist = attrs.TryGetProperty("artistName", out var a) ? a.GetString() : null,
+                                Artist = recArtist,
                                 Album = name,
                                 Source = "AppleMusic"
                             };
@@ -498,10 +721,15 @@ namespace LmenV2.Services
                     var urls = ExtractMotionUrls(video);
                     if (urls != null)
                     {
+                        string resolvedPrimary = await ResolveMp4FromM3u8Async(urls.Value.primary, ct) ?? urls.Value.primary;
+                        string? resolvedAlternate = !string.IsNullOrEmpty(urls.Value.alternate)
+                            ? await ResolveMp4FromM3u8Async(urls.Value.alternate, ct)
+                            : null;
+
                         return new MotionArtworkResult
                         {
-                            Url = urls.Value.primary,
-                            FallbackUrl = urls.Value.alternate,
+                            Url = resolvedPrimary,
+                            FallbackUrl = resolvedAlternate,
                             Title = songTitle,
                             Artist = songArtist ?? (attrs.TryGetProperty("artistName", out var a) ? a.GetString() : null),
                             Album = albumName,
@@ -639,6 +867,34 @@ namespace LmenV2.Services
                 if (_cachedToken != null && now < _tokenExpiresAtMs - 60000)
                     return _cachedToken;
 
+                string tokenFile = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Lmen",
+                    "apple_token.json"
+                );
+
+                if (_cachedToken == null)
+                {
+                    try
+                    {
+                        if (File.Exists(tokenFile))
+                        {
+                            string saved = File.ReadAllText(tokenFile);
+                            using var doc = JsonDocument.Parse(saved);
+                            if (doc.RootElement.TryGetProperty("token", out var tProp) &&
+                                doc.RootElement.TryGetProperty("expiresAt", out var expProp) &&
+                                expProp.TryGetInt64(out long savedExp) &&
+                                savedExp > now + 60000)
+                            {
+                                _cachedToken = tProp.GetString();
+                                _tokenExpiresAtMs = savedExp;
+                                return _cachedToken;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 if (now < _retryTokenAfterMs)
                     return null;
 
@@ -670,7 +926,7 @@ namespace LmenV2.Services
                         if (!scriptResp.IsSuccessStatusCode) continue;
 
                         string js = await scriptResp.Content.ReadAsStringAsync(ct);
-                        var jwtMatches = Regex.Matches(js, @"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+");
+                        var jwtMatches = Regex.Matches(js, @"ey[A-Za-z0-9_-]+\.ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+");
 
                         string? fallbackJwt = null;
                         long fallbackExp = 0;
@@ -685,6 +941,7 @@ namespace LmenV2.Services
                                 {
                                     _cachedToken = jwt;
                                     _tokenExpiresAtMs = exp.Value;
+                                    SaveTokenToDisk(tokenFile, jwt, exp.Value);
                                     return jwt;
                                 }
                                 else if (fallbackJwt == null)
@@ -699,6 +956,7 @@ namespace LmenV2.Services
                         {
                             _cachedToken = fallbackJwt;
                             _tokenExpiresAtMs = fallbackExp;
+                            SaveTokenToDisk(tokenFile, fallbackJwt, fallbackExp);
                             return fallbackJwt;
                         }
                     }
@@ -715,6 +973,18 @@ namespace LmenV2.Services
                 {
                     _tokenLock.Release();
                 }
+            }
+
+            private static void SaveTokenToDisk(string path, string token, long expiresAt)
+            {
+                try
+                {
+                    string dir = Path.GetDirectoryName(path)!;
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    string json = $"{{\"token\":\"{token}\",\"expiresAt\":{expiresAt}}}";
+                    File.WriteAllText(path, json);
+                }
+                catch { }
             }
 
             private static bool IsWebPlayerToken(string jwt)
@@ -789,12 +1059,14 @@ namespace LmenV2.Services
                 {
                     result = await SearchTracksInternalAsync($"{album} {artist} {title}", title, artist, ct);
                     if (result != null) return result;
-                }
 
-                // If track search had no videoCover, try album search
-                if (!string.IsNullOrWhiteSpace(album))
-                {
                     result = await SearchAlbumAsync(album, artist, ct);
+                    if (result != null) return result;
+                }
+                else
+                {
+                    // Fallback album search using song title
+                    result = await SearchAlbumAsync(title, artist, ct);
                     if (result != null) return result;
                 }
 
@@ -833,22 +1105,37 @@ namespace LmenV2.Services
 
                     if (!CanvasMatches(trackTitle, artistsList, title, artist)) continue;
 
-                    if (track.TryGetProperty("album", out var albumObj) &&
-                        albumObj.TryGetProperty("videoCover", out var vcElem) &&
-                        vcElem.ValueKind == JsonValueKind.String)
+                    if (track.TryGetProperty("album", out var albumObj))
                     {
-                        string? vcId = vcElem.GetString();
-                        string? videoUrl = BuildCoverUrl(vcId);
-                        if (!string.IsNullOrEmpty(videoUrl))
+                        if (albumObj.TryGetProperty("videoCover", out var vcElem) &&
+                            vcElem.ValueKind == JsonValueKind.String)
                         {
-                            return new MotionArtworkResult
+                            string? vcId = vcElem.GetString();
+                            string? videoUrl = BuildCoverUrl(vcId);
+                            if (!string.IsNullOrEmpty(videoUrl))
                             {
-                                Url = videoUrl,
-                                Title = trackTitle,
-                                Artist = string.Join(", ", artistsList),
-                                Album = albumObj.TryGetProperty("title", out var at) ? at.GetString() : null,
-                                Source = "Tidal"
-                            };
+                                return new MotionArtworkResult
+                                {
+                                    Url = videoUrl,
+                                    Title = trackTitle,
+                                    Artist = string.Join(", ", artistsList),
+                                    Album = albumObj.TryGetProperty("title", out var at) ? at.GetString() : null,
+                                    Source = "Tidal"
+                                };
+                            }
+                        }
+
+                        // If track has no inline videoCover, but has album title, try searching that album directly
+                        if (albumObj.TryGetProperty("title", out var albTitleElem) &&
+                            albTitleElem.GetString() is string albTitle &&
+                            !string.IsNullOrWhiteSpace(albTitle))
+                        {
+                            var albumRes = await SearchAlbumAsync(albTitle, artist, ct);
+                            if (albumRes != null)
+                            {
+                                albumRes.Title = trackTitle;
+                                return albumRes;
+                            }
                         }
                     }
                 }
@@ -970,11 +1257,34 @@ namespace LmenV2.Services
                     return titleMatch && artistMatch;
                 });
 
+                if (hit == null && !string.IsNullOrWhiteSpace(wantAlbum))
+                {
+                    // Fallback search by album
+                    hit = index.FirstOrDefault(e =>
+                    {
+                        string listed = NormalizeForCanvasMatch(e.Album);
+                        string credited = NormalizeForCanvasMatch(e.Artist);
+                        return !string.IsNullOrWhiteSpace(listed) && listed == wantAlbum &&
+                               !string.IsNullOrWhiteSpace(credited) &&
+                               (wantArtist == credited || wantArtist.Contains(credited) || credited.Contains(wantArtist));
+                    });
+                }
+
                 if (hit != null)
                 {
+                    string resolvedUrl = hit.Url;
+                    if (resolvedUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string? directMp4 = await AppleMusicProvider.ResolveMp4FromM3u8Async(resolvedUrl, ct);
+                        if (!string.IsNullOrEmpty(directMp4) && !directMp4.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
+                        {
+                            resolvedUrl = directMp4;
+                        }
+                    }
+
                     return new MotionArtworkResult
                     {
-                        Url = hit.Url,
+                        Url = resolvedUrl,
                         Title = hit.Song,
                         Artist = hit.Artist,
                         Album = string.IsNullOrWhiteSpace(hit.Album) ? null : hit.Album,
@@ -1046,6 +1356,268 @@ namespace LmenV2.Services
                 {
                     _manifestLock.Release();
                 }
+            }
+        }
+
+        // ====================================================================
+        // PROVIDER 4: Spotify Canvas (Web Token / sp_dc + canvaz-cache protobuf)
+        // ====================================================================
+        private static class SpotifyProvider
+        {
+            private const string SearchUrl = "https://api.spotify.com/v1/search";
+            private const string CanvasUrl = "https://spclient.wg.spotify.com/canvaz-cache/v0/canvases";
+            private const string TokenUrl = "https://open.spotify.com/api/token";
+            private const string SpotifyAppUa = "Spotify/9.0.34.593 iOS/18.4 (iPhone15,3)";
+            private static readonly Regex CanvasUrlRegex = new Regex(@"https://[^""'\s\x00-\x1F]+\.cnvs\.mp4", RegexOptions.Compiled);
+
+            private static string? _cachedAccessToken;
+            private static long _tokenExpiresAtMs;
+            private static long _retryTokenAfterMs;
+            private static readonly SemaphoreSlim _tokenLock = new SemaphoreSlim(1, 1);
+
+            public static async Task<MotionArtworkResult?> SearchAsync(string title, string artist, string? album, string spDcCookie, CancellationToken ct)
+            {
+                if (string.IsNullOrWhiteSpace(spDcCookie)) return null;
+
+                string? token = await GetAccessTokenAsync(spDcCookie.Trim(), ct);
+                if (string.IsNullOrEmpty(token)) return null;
+
+                // 1. Search track
+                string query = string.IsNullOrWhiteSpace(album) ? $"{artist} {title}" : $"{artist} {title} {album}";
+                string url = $"{SearchUrl}?q={Uri.EscapeDataString(query)}&type=track&limit=10";
+
+                string? json = await GetJsonAsync(url, token, ct);
+                if (string.IsNullOrEmpty(json)) return null;
+
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("tracks", out var tracks) ||
+                    !tracks.TryGetProperty("items", out var items) ||
+                    items.ValueKind != JsonValueKind.Array)
+                {
+                    return null;
+                }
+
+                foreach (var track in items.EnumerateArray())
+                {
+                    string? trackTitle = track.TryGetProperty("name", out var t) ? t.GetString() : null;
+                    if (string.IsNullOrEmpty(trackTitle)) continue;
+
+                    var artistsList = new List<string>();
+                    if (track.TryGetProperty("artists", out var arts) && arts.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var a in arts.EnumerateArray())
+                        {
+                            if (a.TryGetProperty("name", out var n) && n.GetString() is string s)
+                                artistsList.Add(s);
+                        }
+                    }
+
+                    if (!CanvasMatches(trackTitle, artistsList, title, artist)) continue;
+
+                    string? trackUri = track.TryGetProperty("uri", out var u) ? u.GetString() : null;
+                    if (string.IsNullOrEmpty(trackUri)) continue;
+
+                    string? canvasUrl = await FetchCanvasUrlAsync(trackUri, token, ct);
+                    if (!string.IsNullOrEmpty(canvasUrl))
+                    {
+                        string? trackAlbum = null;
+                        if (track.TryGetProperty("album", out var alb) && alb.TryGetProperty("name", out var an))
+                            trackAlbum = an.GetString();
+
+                        return new MotionArtworkResult
+                        {
+                            Url = canvasUrl,
+                            Title = trackTitle,
+                            Artist = string.Join(", ", artistsList),
+                            Album = trackAlbum,
+                            Source = "Spotify"
+                        };
+                    }
+                }
+
+                return null;
+            }
+
+            private static async Task<string?> FetchCanvasUrlAsync(string trackUri, string token, CancellationToken ct)
+            {
+                try
+                {
+                    byte[] requestBody = EncodeCanvasRequest(trackUri);
+                    using var req = new HttpRequestMessage(HttpMethod.Post, CanvasUrl);
+                    req.Headers.UserAgent.ParseAdd(SpotifyAppUa);
+                    req.Headers.Add("Authorization", "Bearer " + token);
+                    req.Headers.Add("Accept", "application/protobuf");
+                    req.Headers.Add("Accept-Language", "en");
+                    req.Content = new ByteArrayContent(requestBody);
+                    req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/protobuf");
+
+                    using var resp = await _httpClient.SendAsync(req, ct);
+                    if (!resp.IsSuccessStatusCode) return null;
+
+                    byte[] bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+                    string rawStr = Encoding.Latin1.GetString(bytes);
+                    var match = CanvasUrlRegex.Match(rawStr);
+                    if (match.Success)
+                    {
+                        return match.Value;
+                    }
+                }
+                catch { }
+
+                return null;
+            }
+
+            private static byte[] EncodeCanvasRequest(string trackUri)
+            {
+                // CanvasRequest { repeated Track tracks = 1; Track { string track_uri = 1; } }
+                using var trackMs = new MemoryStream();
+                WriteLengthDelimited(trackMs, 1, Encoding.UTF8.GetBytes(trackUri));
+                byte[] trackBytes = trackMs.ToArray();
+
+                using var rootMs = new MemoryStream();
+                WriteLengthDelimited(rootMs, 1, trackBytes);
+                return rootMs.ToArray();
+            }
+
+            private static void WriteLengthDelimited(Stream stream, int field, byte[] payload)
+            {
+                WriteVarint(stream, (field << 3) | 2);
+                WriteVarint(stream, payload.Length);
+                stream.Write(payload, 0, payload.Length);
+            }
+
+            private static void WriteVarint(Stream stream, long value)
+            {
+                long remaining = value;
+                while (true)
+                {
+                    if ((remaining & ~0x7FL) == 0)
+                    {
+                        stream.WriteByte((byte)remaining);
+                        return;
+                    }
+                    stream.WriteByte((byte)((remaining & 0x7F) | 0x80));
+                    remaining = (long)((ulong)remaining >> 7);
+                }
+            }
+
+            private static string? GenerateTotp()
+            {
+                try
+                {
+                    string secretStr = ",7/*F(\"rLJ2oxaKL^f+E1xvP@N";
+                    long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    long step = now / 30;
+
+                    var rList = new List<int>();
+                    for (int t = 0; t < secretStr.Length; t++)
+                    {
+                        int c = (int)secretStr[t];
+                        int xor = c ^ ((t % 33) + 9);
+                        rList.Add(xor);
+                    }
+                    string rJoined = string.Join("", rList);
+                    byte[] keyBytes = Encoding.UTF8.GetBytes(rJoined);
+
+                    using var hmac = new HMACSHA1(keyBytes);
+                    byte[] msg = new byte[8];
+                    long val = step;
+                    for (int i = 7; i >= 0; i--)
+                    {
+                        msg[i] = (byte)(val & 0xFF);
+                        val >>= 8;
+                    }
+                    byte[] hash = hmac.ComputeHash(msg);
+                    int offset = hash[hash.Length - 1] & 0x0F;
+                    int binary = ((hash[offset] & 0x7F) << 24) |
+                                 ((hash[offset + 1] & 0xFF) << 16) |
+                                 ((hash[offset + 2] & 0xFF) << 8) |
+                                 (hash[offset + 3] & 0xFF);
+                    return (binary % 1000000).ToString("D6");
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            private static async Task<string?> GetAccessTokenAsync(string spDcCookie, CancellationToken ct)
+            {
+                long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                if (_cachedAccessToken != null && now < _tokenExpiresAtMs - 30000)
+                    return _cachedAccessToken;
+
+                if (now < _retryTokenAfterMs)
+                    return null;
+
+                await _tokenLock.WaitAsync(ct);
+                try
+                {
+                    now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    if (_cachedAccessToken != null && now < _tokenExpiresAtMs - 30000)
+                        return _cachedAccessToken;
+
+                    string? totp = GenerateTotp();
+                    string url = $"{TokenUrl}?reason=init&productType=web-player";
+                    if (!string.IsNullOrEmpty(totp))
+                    {
+                        url += $"&totp={totp}&totpServer={totp}&totpVer=61";
+                    }
+
+                    using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                    req.Headers.UserAgent.ParseAdd(UserAgent);
+                    req.Headers.Add("Cookie", $"sp_dc={spDcCookie}");
+                    req.Headers.Add("Referer", "https://open.spotify.com/");
+                    req.Headers.Add("App-Platform", "WebPlayer");
+
+                    using var resp = await _httpClient.SendAsync(req, ct);
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        _retryTokenAfterMs = now + 300000;
+                        return null;
+                    }
+
+                    string json = await resp.Content.ReadAsStringAsync(ct);
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("accessToken", out var tokElem) &&
+                        tokElem.GetString() is string token && !string.IsNullOrWhiteSpace(token))
+                    {
+                        _cachedAccessToken = token;
+                        if (doc.RootElement.TryGetProperty("accessTokenExpirationTimestampMs", out var expElem) &&
+                            expElem.TryGetInt64(out long expMs))
+                        {
+                            _tokenExpiresAtMs = expMs;
+                        }
+                        else
+                        {
+                            _tokenExpiresAtMs = now + 3600000;
+                        }
+                        return token;
+                    }
+
+                    _retryTokenAfterMs = now + 300000;
+                    return null;
+                }
+                catch
+                {
+                    _retryTokenAfterMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 300000;
+                    return null;
+                }
+                finally
+                {
+                    _tokenLock.Release();
+                }
+            }
+
+            private static async Task<string?> GetJsonAsync(string url, string token, CancellationToken ct)
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.UserAgent.ParseAdd(UserAgent);
+                req.Headers.Add("Authorization", "Bearer " + token);
+                using var resp = await _httpClient.SendAsync(req, ct);
+                if (resp.IsSuccessStatusCode)
+                    return await resp.Content.ReadAsStringAsync(ct);
+                return null;
             }
         }
     }

@@ -14,12 +14,15 @@ Inspired by the macOS ambient player **Lumen**, rebuilt from scratch for Windows
 - Rotating light, breathing animation, adjustable brightness, spread, and backdrop bloom.
 - Audio-reactive pulse driven by WASAPI loopback capture.
 - Built-in color presets and a screen color dropper for per-track custom colors.
+- Reactive glow that tints the artwork, cards, and player controls from the live beam color and pulse.
 
 ### Fullscreen visualizer
 - Large artwork, blurred cover backdrop, and a dark ambient stage.
 - Play/pause, previous/next, shuffle, repeat, seek bar, and master volume.
 - Windowed or borderless fullscreen, with taskbar auto-reveal on hover.
-- Fullscreen motion mode that plays animated album covers and canvas loops.
+- Fullscreen motion mode with animated covers, a blurred video backdrop, and an auto-hiding transport bar with seek, shuffle, repeat, and volume.
+- Live glow controls with color presets, a screen dropper, brightness/spread sliders, and a reactive-glow toggle.
+- Frosted-glass controls and a reactive glow pill that dims when paused.
 
 ### Desktop overlay
 - Transparent, click-through edge glow that stays visible while you browse, work, or game.
@@ -35,9 +38,13 @@ Inspired by the macOS ambient player **Lumen**, rebuilt from scratch for Windows
   Musixmatch, and a Genius plain-text fallback.
 
 ### Motion artwork
-- Animated covers from Apple Music editorial/album videos, Tidal video covers, and the
-  Vivi community canvas library.
-- Background prefetch so playback starts immediately, plus an on-disk cache.
+- Animated covers from Apple Music editorial/album videos, Tidal 60fps video covers,
+  the Vivi community canvas library, and Spotify Canvas.
+- Optional Spotify `sp_dc` cookie unlocks Canvas streaming and can prioritize Spotify
+  over Apple Music and Tidal; the other providers work without a cookie.
+- Fuzzy title, album, and artist matching with background prefetch and a per-video
+  on-disk cache, so loops start quickly and replay offline.
+- Motion artwork can be disabled in Settings.
 
 ### Media and system integration
 - Windows Global System Media Transport Controls (GSMTC): works with Spotify Desktop,
@@ -53,6 +60,8 @@ Inspired by the macOS ambient player **Lumen**, rebuilt from scratch for Windows
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build and run from source.
 - A media app that publishes to Windows media controls. No account, login, or API key is required.
 - Optional: a PaxSenix API key for that provider's extended routes.
+- Optional: a Spotify `sp_dc` cookie to unlock Spotify Canvas. Apple Music, Tidal, and
+  community Canvas work without it.
 
 ## Run from source
 
@@ -92,12 +101,12 @@ Double-click the album art to enter fullscreen motion mode.
 
 | Path | Contents |
 |---|---|
-| `%APPDATA%\LmenV2\settings.json` | Glow, audio, and lyrics settings |
+| `%APPDATA%\LmenV2\settings.json` | Glow, audio, lyrics, and motion artwork settings |
 | `%LOCALAPPDATA%\LmenV2\Lyrics` | Cached lyric provider responses |
 | `%LOCALAPPDATA%\LmenV2\LyricsTranslation` | Cached translations and romanizations |
 | `%LOCALAPPDATA%\Lmen\CanvasCache` | Downloaded motion artwork |
 
-Settings include glow brightness and spread, rotation speed, breathing amount, backdrop brightness, music reactivity, lyric beat effects, translation language, lyric offset, and an optional PaxSenix API key.
+Settings include glow brightness and spread, rotation speed, breathing amount, backdrop brightness, music reactivity, lyric beat effects, translation language, lyric offset, motion artwork on/off, Spotify Canvas priority, an optional Spotify `sp_dc` cookie, and an optional PaxSenix API key.
 
 ## Project layout
 

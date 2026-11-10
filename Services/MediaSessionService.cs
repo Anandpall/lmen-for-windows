@@ -13,6 +13,7 @@ namespace LmenV2.Services
     {
         private GlobalSystemMediaTransportControlsSessionManager? _sessionManager;
         private GlobalSystemMediaTransportControlsSession? _currentSession;
+        private System.Windows.Threading.DispatcherTimer? _sessionPollTimer;
 
         // Fast track skipping fires several MediaPropertiesChanged events in a row. Each one
         // kicks off an async refresh that awaits artwork, so the responses can come back out
@@ -21,6 +22,8 @@ namespace LmenV2.Services
         private int _refreshVersion;
 
         public event Action<MediaTrackInfo>? TrackUpdated;
+        public event Action<TimeSpan, TimeSpan>? TimelineUpdated;
+        public event Action<bool>? PlaybackStateChanged;
 
         public MediaTrackInfo CurrentTrack { get; private set; } = new MediaTrackInfo();
 
@@ -32,8 +35,20 @@ namespace LmenV2.Services
                 if (_sessionManager != null)
                 {
                     _sessionManager.CurrentSessionChanged += OnCurrentSessionChanged;
+                    _sessionManager.SessionsChanged += OnSessionsChanged;
                     UpdateCurrentSession(_sessionManager.GetCurrentSession());
                 }
+
+                // Periodic check for players (BitChord, web browsers) that don't reliably signal CurrentSessionChanged
+                Application.Current?.Dispatcher.InvokeAsync(() =>
+                {
+                    _sessionPollTimer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromSeconds(2.0)
+                    };
+                    _sessionPollTimer.Tick += (s, e) => PollActiveSession();
+                    _sessionPollTimer.Start();
+                });
             }
             catch (Exception ex)
             {
@@ -46,8 +61,45 @@ namespace LmenV2.Services
             UpdateCurrentSession(sender.GetCurrentSession());
         }
 
+        private void OnSessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender, SessionsChangedEventArgs args)
+        {
+            UpdateCurrentSession(sender.GetCurrentSession());
+        }
+
+        private void PollActiveSession()
+        {
+            if (_sessionManager == null) return;
+            try
+            {
+                var cur = _sessionManager.GetCurrentSession();
+                if (cur == null)
+                {
+                    var sessions = _sessionManager.GetSessions();
+                    cur = sessions.FirstOrDefault(s => s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
+                       ?? sessions.FirstOrDefault();
+                }
+
+                if (!ReferenceEquals(cur, _currentSession))
+                {
+                    UpdateCurrentSession(cur);
+                }
+            }
+            catch { }
+        }
+
         private void UpdateCurrentSession(GlobalSystemMediaTransportControlsSession? session)
         {
+            if (session == null && _sessionManager != null)
+            {
+                try
+                {
+                    var sessions = _sessionManager.GetSessions();
+                    session = sessions.FirstOrDefault(s => s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
+                           ?? sessions.FirstOrDefault();
+                }
+                catch { }
+            }
+
             if (_currentSession != null)
             {
                 try
@@ -101,7 +153,7 @@ namespace LmenV2.Services
 
                     Application.Current?.Dispatcher.BeginInvoke(() =>
                     {
-                        TrackUpdated?.Invoke(CurrentTrack);
+                        TimelineUpdated?.Invoke(CurrentTrack.Position, CurrentTrack.Duration);
                     });
                 }
             }
@@ -152,11 +204,16 @@ namespace LmenV2.Services
                         bitmap.StreamSource = memStream;
                         bitmap.EndInit();
                         bitmap.Freeze();
+                        App.Log($"[MediaSessionService] Thumbnail loaded successfully ({bitmap.PixelWidth}x{bitmap.PixelHeight})");
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[MediaSessionService] Thumbnail load failed: {ex.Message}");
+                        App.Log($"[MediaSessionService] Thumbnail load failed: {ex.Message}");
                     }
+                }
+                else
+                {
+                    App.Log("[MediaSessionService] GSMTC mediaProps.Thumbnail is null (waiting for HighResArtworkService fallback)");
                 }
 
                 // The session may have been switched or cleared while we were awaiting.
@@ -188,6 +245,7 @@ namespace LmenV2.Services
                 };
 
                 CurrentTrack = newTrack;
+                App.Log($"[MediaSessionService] Track updated: '{newTrack.Title}' - '{newTrack.Artist}' (Playing: {newTrack.IsPlaying})");
 
                 Application.Current?.Dispatcher.BeginInvoke(() =>
                 {
@@ -249,12 +307,15 @@ namespace LmenV2.Services
                 if (playbackInfo != null)
                 {
                     bool isPlaying = playbackInfo.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
-                    CurrentTrack.IsPlaying = isPlaying;
-
-                    Application.Current?.Dispatcher.BeginInvoke(() =>
+                    if (CurrentTrack.IsPlaying != isPlaying)
                     {
-                        TrackUpdated?.Invoke(CurrentTrack);
-                    });
+                        CurrentTrack.IsPlaying = isPlaying;
+
+                        Application.Current?.Dispatcher.BeginInvoke(() =>
+                        {
+                            PlaybackStateChanged?.Invoke(isPlaying);
+                        });
+                    }
                 }
             }
             catch { }
@@ -421,9 +482,12 @@ namespace LmenV2.Services
 
         public void Dispose()
         {
+            _sessionPollTimer?.Stop();
+
             if (_sessionManager != null)
             {
                 _sessionManager.CurrentSessionChanged -= OnCurrentSessionChanged;
+                _sessionManager.SessionsChanged -= OnSessionsChanged;
             }
 
             if (_currentSession != null)

@@ -13,6 +13,10 @@ namespace LmenV2.Views
         // ValueChanged handlers do not echo the seed values back into SettingsService.
         private bool _loading;
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
         public SettingsWindow()
         {
             InitializeComponent();
@@ -20,6 +24,15 @@ namespace LmenV2.Views
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            Topmost = true;
+            Activate();
+            Focus();
+            var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (handle != IntPtr.Zero)
+            {
+                SetForegroundWindow(handle);
+            }
+
             // Pushing values into the sliders raises ValueChanged, which would write the
             // value straight back into SettingsService (and trigger a save + a SettingsChanged
             // storm) before the user touched anything. Suppress that while we sync the UI.
@@ -67,6 +80,21 @@ namespace LmenV2.Views
                 {
                     PaxSenixApiKeyBox.Text = _settings.PaxSenixApiKey;
                 }
+
+                if (EnableMotionArtworkCheckBox != null)
+                {
+                    EnableMotionArtworkCheckBox.IsChecked = _settings.EnableMotionArtwork;
+                }
+
+                if (PrioritizeSpotifyCanvasCheckBox != null)
+                {
+                    PrioritizeSpotifyCanvasCheckBox.IsChecked = _settings.PrioritizeSpotifyCanvas;
+                }
+
+                if (SpotifySpDcBox != null)
+                {
+                    SpotifySpDcBox.Text = _settings.SpotifySpDcCookie;
+                }
             }
             finally
             {
@@ -78,6 +106,7 @@ namespace LmenV2.Views
             OverlayModeButton.Style = (Style)FindResource(isOverlay ? "SegmentSelectedButton" : "SegmentButton");
 
             SystemVolumeService.Instance.VolumeChanged += OnSystemVolumeChanged;
+            _settings.SettingsChanged += OnSettingsChanged;
             UpdateVolumeLabel(SystemVolumeService.Instance.MasterVolume, SystemVolumeService.Instance.IsMuted);
 
             UpdateLabels();
@@ -216,8 +245,63 @@ namespace LmenV2.Views
             _settings.PaxSenixApiKey = PaxSenixApiKeyBox.Text;
         }
 
+        private void EnableMotionArtwork_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            _settings.EnableMotionArtwork = true;
+        }
+
+        private void EnableMotionArtwork_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            _settings.EnableMotionArtwork = false;
+        }
+
+        private void PrioritizeSpotifyCanvas_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            _settings.PrioritizeSpotifyCanvas = true;
+        }
+
+        private void PrioritizeSpotifyCanvas_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            _settings.PrioritizeSpotifyCanvas = false;
+        }
+
+        private void SpotifySpDcBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_loading) return;
+            _settings.SpotifySpDcCookie = SpotifySpDcBox.Text;
+        }
+
+        private void OnSettingsChanged()
+        {
+            if (_loading) return;
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (_loading) return;
+                _loading = true;
+                try
+                {
+                    BrightnessSlider.Value = _settings.GlowBrightness * 100.0;
+                    BackdropSlider.Value = _settings.BackdropBrightness * 100.0;
+                    SpreadSlider.Value = _settings.GlowSpread;
+                    SpeedSlider.Value = _settings.RotationSpeed * 100.0;
+                    ReactivitySlider.Value = _settings.AudioReactivity * 100.0;
+                    BreathingSlider.Value = _settings.BreathingAmount * 100.0;
+                    UpdateLabels();
+                }
+                finally
+                {
+                    _loading = false;
+                }
+            });
+        }
+
         protected override void OnClosed(System.EventArgs e)
         {
+            _settings.SettingsChanged -= OnSettingsChanged;
             SystemVolumeService.Instance.VolumeChanged -= OnSystemVolumeChanged;
             base.OnClosed(e);
         }

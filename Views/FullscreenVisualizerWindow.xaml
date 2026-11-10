@@ -215,6 +215,74 @@
             </Setter>
         </Style>
 
+        <!-- Smooth Edged Rectangle Glass Button (Modern Rounded Rectangle, Never Oval) -->
+        <Style x:Key="SmoothRectGlassButton" TargetType="Button">
+            <Setter Property="Background" Value="#1CFFFFFF"/>
+            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#32FFFFFF"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <!-- Glass body with subtle shadow -->
+                            <Border x:Name="fill"
+                                    CornerRadius="8"
+                                    Background="{TemplateBinding Background}">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.35"/>
+                                </Border.Effect>
+                            </Border>
+
+                            <!-- Specular sheen across the top half -->
+                            <Border x:Name="sheen" CornerRadius="8" IsHitTestVisible="False" Opacity="0.85">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#30FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#0AFFFFFF" Offset="0.5"/>
+                                        <GradientStop Color="#00000000" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- Rim light border + content -->
+                            <Border x:Name="rim"
+                                    CornerRadius="8"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    Padding="{TemplateBinding Padding}">
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#50FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#18FFFFFF" Offset="0.55"/>
+                                        <GradientStop Color="#0AFFFFFF" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="Center"
+                                                  RenderTransformOrigin="0.5,0.5">
+                                    <ContentPresenter.RenderTransform>
+                                        <ScaleTransform x:Name="contentScale" ScaleX="1" ScaleY="1"/>
+                                    </ContentPresenter.RenderTransform>
+                                </ContentPresenter>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="fill" Property="Background" Value="#2BFFFFFF"/>
+                                <Setter TargetName="sheen" Property="Opacity" Value="1.0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="fill" Property="Opacity" Value="0.75"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Apple Liquid Glass Panel: luminous top edge, gradient rim, deep ambient shadow -->
         <Style x:Key="LiquidGlassPanel" TargetType="Border">
             <Setter Property="CornerRadius" Value="24"/>
@@ -491,7 +559,7 @@
 
         <!-- Color Swatch Circle Button (for Curated Palette & Dropper) -->
         <Style x:Key="ColorSwatchCircleButton" TargetType="Button">
-            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush" Value="#40FFFFFF"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -502,10 +570,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="1" Opacity="0.35"/>
-                            </Border.Effect>
+                                CornerRadius="14">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -515,6 +580,69 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="swatchBorder" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Color Dropper Pill Button Style (Liquid Glass with Top Specular Sheen) -->
+        <Style x:Key="ColorDropperLiquidGlassButton" TargetType="Button">
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#42FFFFFF" Offset="0"/>
+                        <GradientStop Color="#18FFFFFF" Offset="0.5"/>
+                        <GradientStop Color="#0DFFFFFF" Offset="1"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#38FFFFFF"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="fill"
+                                    CornerRadius="20"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.30"/>
+                                </Border.Effect>
+                            </Border>
+                            <!-- Top Specular Highlight Sheen -->
+                            <Border CornerRadius="20" IsHitTestVisible="False" Margin="1,1,1,1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#28FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#00FFFFFF" Offset="0.5"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="fill" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#5AFFFFFF" Offset="0"/>
+                                            <GradientStop Color="#28FFFFFF" Offset="0.5"/>
+                                            <GradientStop Color="#14FFFFFF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="fill" Property="BorderBrush" Value="#55FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="fill" Property="Opacity" Value="0.82"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -651,6 +779,22 @@
                        Stretch="UniformToFill"
                        RenderOptions.BitmapScalingMode="Linear"
                        Opacity="0.0"/>
+
+                <!-- Normal Mode Ambient Motion Video Backdrop (Playing same video, blurred & enlarged) -->
+                <MediaElement x:Name="TvMotionVideoBackdrop"
+                              Stretch="UniformToFill"
+                              IsHitTestVisible="False"
+                              LoadedBehavior="Manual"
+                              UnloadedBehavior="Manual"
+                              Volume="0"
+                              IsMuted="True"
+                              ScrubbingEnabled="True"
+                              Opacity="0.0"
+                              MediaEnded="TvMotionVideoBackdrop_MediaEnded">
+                    <MediaElement.Effect>
+                        <BlurEffect Radius="65" KernelType="Gaussian" RenderingBias="Performance"/>
+                    </MediaElement.Effect>
+                </MediaElement>
             </Grid>
 
             <!-- TV Atmospheric Overlay -->
@@ -694,6 +838,7 @@
                         Style="{StaticResource FrostedMiniCircleButton}"
                         Margin="0,0,5,0"
                         Click="GearButton_Click"
+                        AutomationProperties.Name="Settings and Options"
                         ToolTip="Settings &amp; Options">
                     <TextBlock Text="&#xE713;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -752,6 +897,7 @@
                         Style="{StaticResource FrostedMiniCircleButton}"
                         Margin="0,0,5,0"
                         Click="Minimize_Click"
+                        AutomationProperties.Name="Minimize"
                         ToolTip="Minimize">
                     <TextBlock Text="&#xE921;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -765,6 +911,7 @@
                         Style="{StaticResource FrostedMiniCircleButton}"
                         Margin="0,0,5,0"
                         Click="ToggleRestore_Click"
+                        AutomationProperties.Name="Restore Down"
                         ToolTip="Restore Down (Windowed Mode)">
                     <TextBlock x:Name="RestoreIcon"
                                Text="&#xE923;"
@@ -778,6 +925,7 @@
                 <Button x:Name="CloseButton"
                         Style="{StaticResource FrostedCloseCircleButton}"
                         Click="Close_Click"
+                        AutomationProperties.Name="Close Visualizer"
                         ToolTip="Close Visualizer">
                     <TextBlock Text="&#xE8BB;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -827,12 +975,7 @@
                     <Border x:Name="ArtFallbackBackground" Background="#240D14" IsHitTestVisible="False">
                         <TextBlock Text="🎵" FontSize="92" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.40"/>
                     </Border>
-                    <!-- Album Cover Image: Hardware Linear Bilinear Filtering -->
-                    <Image x:Name="AlbumCoverImage"
-                           Stretch="UniformToFill"
-                           IsHitTestVisible="False"
-                           RenderOptions.BitmapScalingMode="Linear"/>
-                    <!-- Motion Album Cover Video: Hardware GPU Accelerated 60fps Looping Video -->
+                    <!-- Motion Album Cover Video: Hardware GPU Accelerated 60fps Looping Video (Underneath cover image) -->
                     <MediaElement x:Name="AlbumCoverVideo"
                                   Stretch="UniformToFill"
                                   LoadedBehavior="Manual"
@@ -840,12 +983,18 @@
                                   Volume="0"
                                   IsMuted="True"
                                   ScrubbingEnabled="True"
-                                  Opacity="0"
+                                  Opacity="1.0"
                                   Visibility="Visible"
                                   IsHitTestVisible="False"
                                   MediaOpened="AlbumCoverVideo_MediaOpened"
                                   MediaEnded="AlbumCoverVideo_MediaEnded"
                                   MediaFailed="AlbumCoverVideo_MediaFailed"/>
+                    <!-- Album Cover Image: Hardware Linear Bilinear Filtering (On top of video, shields user from video loading artifacts) -->
+                    <Image x:Name="AlbumCoverImage"
+                           Stretch="UniformToFill"
+                           IsHitTestVisible="False"
+                           Opacity="1.0"
+                           RenderOptions.BitmapScalingMode="Linear"/>
                     <!-- Ambient Motion Artwork Pill Badge -->
                     <Border x:Name="MotionBadge"
                             HorizontalAlignment="Right"
@@ -908,6 +1057,7 @@
                             Margin="0,0,8,0"
                             Style="{StaticResource FrostedMiniCircleButton}"
                             Click="MotionButton_Click"
+                            AutomationProperties.Name="Motion Canvas"
                             ToolTip="Fullscreen Animated Album Cover / Motion Canvas (M / Double-click)">
                         <TextBlock x:Name="MotionButtonIcon"
                                    Text="&#xE714;"
@@ -920,6 +1070,7 @@
                             Margin="0,0,8,0"
                             Style="{StaticResource FrostedMiniCircleButton}"
                             Click="ToggleLyrics_Click"
+                            AutomationProperties.Name="Timed Lyrics"
                             ToolTip="Timed Lyrics Mode (L)">
                         <TextBlock x:Name="LyricsButtonIcon"
                                    Text="&#xEC4F;"
@@ -932,6 +1083,7 @@
                             Margin="0,0,8,0"
                             Style="{StaticResource FrostedMiniCircleButton}"
                             Click="StartColorDropper_Click"
+                            AutomationProperties.Name="Color Dropper"
                             ToolTip="Color Dropper: Pick any color on screen for this song">
                         <TextBlock Text="&#xEF3C;"
                                    FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -942,6 +1094,7 @@
                     <Button x:Name="MoreOptionsButton"
                             Style="{StaticResource FrostedMiniCircleButton}"
                             Click="ToggleGlowControls_Click"
+                            AutomationProperties.Name="Live Glow Controls"
                             ToolTip="Live Glow Controls &amp; Visual Options">
                         <TextBlock Text="&#xE712;"
                                    FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -1029,6 +1182,7 @@
                         Style="{StaticResource TransportCircleButton}"
                         Margin="0,0,14,0"
                         Click="Shuffle_Click"
+                        AutomationProperties.Name="Shuffle"
                         ToolTip="Shuffle">
                     <TextBlock Text="&#xE8B1;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -1040,6 +1194,7 @@
                         Style="{StaticResource TransportCircleButton}"
                         Margin="0,0,16,0"
                         Click="Prev_Click"
+                        AutomationProperties.Name="Previous Track"
                         ToolTip="Previous Track (Left Arrow)">
                     <TextBlock Text="&#xE892;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -1050,8 +1205,16 @@
                 <Button x:Name="PlayPauseButton"
                         Style="{StaticResource TransportHeroPlayButton}"
                         Margin="0,0,16,0"
+                        RenderTransformOrigin="0.5,0.5"
                         Click="PlayPause_Click"
+                        AutomationProperties.Name="Play or Pause"
                         ToolTip="Play / Pause (Space)">
+                    <Button.RenderTransform>
+                        <ScaleTransform x:Name="PlayPauseScale" ScaleX="1.0" ScaleY="1.0"/>
+                    </Button.RenderTransform>
+                    <Button.Effect>
+                        <DropShadowEffect x:Name="PlayPauseShadow" Color="#FFFFFF" BlurRadius="18" ShadowDepth="0" Opacity="0.30"/>
+                    </Button.Effect>
                     <TextBlock x:Name="PlayPauseIcon"
                                Text="&#xE769;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -1063,6 +1226,7 @@
                         Style="{StaticResource TransportCircleButton}"
                         Margin="0,0,14,0"
                         Click="Next_Click"
+                        AutomationProperties.Name="Next Track"
                         ToolTip="Next Track (Right Arrow)">
                     <TextBlock Text="&#xE893;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -1073,6 +1237,7 @@
                 <Button x:Name="RepeatButton"
                         Style="{StaticResource TransportCircleButton}"
                         Click="Repeat_Click"
+                        AutomationProperties.Name="Repeat"
                         ToolTip="Repeat">
                     <TextBlock Text="&#xE8EE;"
                                FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -1095,7 +1260,8 @@
                     MouseEnter="VolumeControl_MouseEnter"
                     MouseLeave="VolumeControl_MouseLeave"
                     MouseWheel="VolumeControl_MouseWheel"
-                    Cursor="Hand">
+                    Cursor="Hand"
+                    Visibility="Collapsed">
                 <Border.Effect>
                     <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.25"/>
                 </Border.Effect>
@@ -1110,6 +1276,7 @@
                             Grid.Column="0"
                             Style="{StaticResource VolumeMuteButtonStyle}"
                             Click="VolumeMuteButton_Click"
+                            AutomationProperties.Name="Mute or Unmute Volume"
                             ToolTip="Master Volume (Click to Mute, Hover to Expand)">
                         <TextBlock x:Name="VolumeIcon"
                                    Text="&#xE767;"
@@ -1138,6 +1305,7 @@
                                 PreviewMouseLeftButtonUp="VolumeSlider_PreviewMouseLeftButtonUp"
                                 LostMouseCapture="VolumeSlider_LostMouseCapture"
                                 MouseWheel="VolumeControl_MouseWheel"
+                                AutomationProperties.Name="Master Volume"
                                 ToolTip="Master Volume (Scroll or Up/Down arrows)"/>
 
                         <!-- Volume Percentage Text -->
@@ -1154,19 +1322,51 @@
                 </Grid>
             </Border>
 
-            <!-- 6. Bottom Pill Button: Text ONLY (Reactive Glow, Refined & Compact) -->
+            <!-- 6. Bottom Smooth-Edged Rectangle Button: 4-Pointed Sparkle Star Icon, reveals faint 'Reactive Glow' on hover -->
             <Button x:Name="ReactiveGlowButton"
-                    Style="{StaticResource FrostedPillButton}"
+                    Style="{StaticResource SmoothRectGlassButton}"
                     HorizontalAlignment="Center"
-                    Margin="0,12,0,0"
-                    Padding="18,6"
+                    Margin="0,16,0,0"
+                    Height="32"
+                    Padding="9,0"
+                    RenderTransformOrigin="0.5,0.5"
                     Click="ToggleAudioPulse_Click"
-                    ToolTip="Toggle dynamic kick &amp; bass reactive speed">
-                <TextBlock x:Name="ReactiveGlowText"
-                           Text="Reactive Glow"
-                           FontSize="11"
-                           FontWeight="Medium"
-                           Foreground="#FFFFFFFF"/>
+                    MouseEnter="ReactiveGlowButton_MouseEnter"
+                    MouseLeave="ReactiveGlowButton_MouseLeave"
+                    AutomationProperties.Name="Toggle Reactive Glow"
+                    ToolTip="Toggle dynamic reactive glow">
+                <Button.RenderTransform>
+                    <ScaleTransform x:Name="ReactiveGlowScale" ScaleX="1.0" ScaleY="1.0"/>
+                </Button.RenderTransform>
+                <Button.Effect>
+                    <DropShadowEffect x:Name="ReactiveGlowShadow"
+                                      Color="#FFFFFF"
+                                      BlurRadius="16"
+                                      ShadowDepth="0"
+                                      Opacity="0.45"/>
+                </Button.Effect>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <!-- 4-Pointed Sparkle Star (Exact 1:1 match with user reference) -->
+                    <Path x:Name="ReactiveGlowIcon"
+                          Data="M 12,0 Q 12,12 24,12 Q 12,12 12,24 Q 12,12 0,12 Q 12,12 12,0 Z"
+                          Fill="#FFFFFFFF"
+                          Stretch="Uniform"
+                          Width="13" Height="13"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Center"/>
+
+                    <!-- Faint readable text, revealed smoothly on hover -->
+                    <TextBlock x:Name="ReactiveGlowText"
+                               Text="Reactive Glow"
+                               FontSize="11.5"
+                               FontWeight="Medium"
+                               Foreground="#90FFFFFF"
+                               VerticalAlignment="Center"
+                               Opacity="0.0"
+                               Width="0"
+                               Margin="0"
+                               ClipToBounds="True"/>
+                </StackPanel>
             </Button>
 
         </StackPanel>
@@ -1239,6 +1439,7 @@
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsTranslate_Click"
+                            AutomationProperties.Name="Translate Lyrics"
                             ToolTip="Translate lyrics into the language chosen in Settings">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -1252,6 +1453,7 @@
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsRomanize_Click"
+                            AutomationProperties.Name="Romanize Lyrics"
                             ToolTip="Show non-Latin lyrics in the Latin alphabet">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Aa" FontSize="11" FontWeight="Bold" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -1265,6 +1467,7 @@
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsOffsetButton_Click"
+                            AutomationProperties.Name="Lyric Sync Offset"
                             ToolTip="Shift lyric timing to match the recording">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE916;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -1278,6 +1481,7 @@
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsProviderButton_Click"
+                            AutomationProperties.Name="Lyric Source"
                             ToolTip="Choose where these lyrics come from">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE71D;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -1291,6 +1495,7 @@
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsStyleToggle_Click"
+                            AutomationProperties.Name="Switch Lyrics Style"
                             ToolTip="Switch Style: Stage (BitChord) / Fisheye Lens (Verci) [S]">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock x:Name="LyricsStyleIcon" Text="📜" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -1303,6 +1508,7 @@
                             Style="{StaticResource FrostedPillButton}"
                             Padding="16,7"
                             Click="ExitLyrics_Click"
+                            AutomationProperties.Name="Close Lyrics"
                             ToolTip="Return to Player (Esc / L)">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -1417,13 +1623,13 @@
                                    HorizontalAlignment="Center"
                                    Margin="0,0,0,14"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <Button Style="{StaticResource FrostedPillButton}" Content="-1.0s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="-1000"/>
-                            <Button Style="{StaticResource FrostedPillButton}" Content="-0.5s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="-500"/>
-                            <Button Style="{StaticResource FrostedPillButton}" Content="-0.1s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="-100"/>
-                            <Button Style="{StaticResource FrostedPillButton}" Content="Reset" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetReset_Click"/>
-                            <Button Style="{StaticResource FrostedPillButton}" Content="+0.1s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="100"/>
-                            <Button Style="{StaticResource FrostedPillButton}" Content="+0.5s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="500"/>
-                            <Button Style="{StaticResource FrostedPillButton}" Content="+1.0s" Padding="12,7" Click="LyricsOffsetStep_Click" Tag="1000"/>
+                            <Button Style="{StaticResource FrostedPillButton}" Content="-1.0s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="-1000" AutomationProperties.Name="Decrease lyric offset by 1 second" ToolTip="Decrease offset by 1.0s"/>
+                            <Button Style="{StaticResource FrostedPillButton}" Content="-0.5s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="-500" AutomationProperties.Name="Decrease lyric offset by 0.5 seconds" ToolTip="Decrease offset by 0.5s"/>
+                            <Button Style="{StaticResource FrostedPillButton}" Content="-0.1s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="-100" AutomationProperties.Name="Decrease lyric offset by 0.1 seconds" ToolTip="Decrease offset by 0.1s"/>
+                            <Button Style="{StaticResource FrostedPillButton}" Content="Reset" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetReset_Click" AutomationProperties.Name="Reset lyric offset" ToolTip="Reset offset to 0.0s"/>
+                            <Button Style="{StaticResource FrostedPillButton}" Content="+0.1s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="100" AutomationProperties.Name="Increase lyric offset by 0.1 seconds" ToolTip="Increase offset by 0.1s"/>
+                            <Button Style="{StaticResource FrostedPillButton}" Content="+0.5s" Padding="12,7" Margin="0,0,8,0" Click="LyricsOffsetStep_Click" Tag="500" AutomationProperties.Name="Increase lyric offset by 0.5 seconds" ToolTip="Increase offset by 0.5s"/>
+                            <Button Style="{StaticResource FrostedPillButton}" Content="+1.0s" Padding="12,7" Click="LyricsOffsetStep_Click" Tag="1000" AutomationProperties.Name="Increase lyric offset by 1 second" ToolTip="Increase offset by 1.0s"/>
                         </StackPanel>
                         <TextBlock Text="Positive values show lyrics later · click outside to close"
                                    FontSize="10"
@@ -1494,6 +1700,7 @@
                     Padding="18,8"
                     Visibility="Collapsed"
                     Click="SyncLyricsPillButton_Click"
+                    AutomationProperties.Name="Sync to Track"
                     ToolTip="Re-sync scroll position with current song time">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Margin="0,0,8,0" VerticalAlignment="Center"/>
@@ -1510,34 +1717,83 @@
         <Grid x:Name="FullscreenMotionStage"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch"
-              Background="#0A0608"
+              Background="Transparent"
               Visibility="Collapsed"
+              MouseMove="FullscreenMotionStage_MouseMove"
               MouseLeftButtonDown="FullscreenMotionStage_MouseLeftButtonDown"
               PreviewMouseLeftButtonDown="FullscreenMotionStage_PreviewMouseLeftButtonDown">
 
-            <!-- High-Res Static Album Cover Base (Instantly visible while video buffers or as fallback) -->
-            <Image x:Name="FullscreenCoverImage"
-                   Stretch="Uniform"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
+            <!-- TV Ambient Defocused Album Artwork in Dead Space -->
+            <Image x:Name="MotionBlurredBackdrop"
+                   Stretch="UniformToFill"
                    IsHitTestVisible="False"
+                   Opacity="0.80"
                    RenderOptions.BitmapScalingMode="Linear"/>
 
-            <!-- Fullscreen Motion Video Element -->
-            <MediaElement x:Name="FullscreenMotionVideo"
-                          Stretch="Uniform"
-                          HorizontalAlignment="Center"
-                          VerticalAlignment="Center"
+            <!-- Fullscreen Ambient Motion Video Backdrop (Playing same video, blurred & enlarged) -->
+            <MediaElement x:Name="MotionVideoBackdrop"
+                          Stretch="UniformToFill"
+                          IsHitTestVisible="False"
                           LoadedBehavior="Manual"
                           UnloadedBehavior="Manual"
                           Volume="0"
                           IsMuted="True"
                           ScrubbingEnabled="True"
-                          Opacity="0"
-                          IsHitTestVisible="False"
-                          MediaOpened="FullscreenMotionVideo_MediaOpened"
-                          MediaEnded="FullscreenMotionVideo_MediaEnded"
-                          MediaFailed="FullscreenMotionVideo_MediaFailed"/>
+                          Opacity="0.0"
+                          MediaEnded="MotionVideoBackdrop_MediaEnded">
+                <MediaElement.Effect>
+                    <BlurEffect Radius="65" KernelType="Gaussian" RenderingBias="Performance"/>
+                </MediaElement.Effect>
+            </MediaElement>
+
+            <!-- Atmospheric Vignette Overlay over Dead Space -->
+            <Rectangle IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <RadialGradientBrush Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.85" RadiusY="0.85">
+                        <GradientStop Color="#25000000" Offset="0"/>
+                        <GradientStop Color="#70050207" Offset="0.55"/>
+                        <GradientStop Color="#DC070308" Offset="1.0"/>
+                    </RadialGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <!-- Main Centered Motion Artwork Frame -->
+            <Border x:Name="MotionCenterFrame"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    CornerRadius="20"
+                    ClipToBounds="True"
+                    Margin="48,72,48,116">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="64" ShadowDepth="12" Opacity="0.80"/>
+                </Border.Effect>
+                <Grid>
+                    <!-- Fullscreen Motion Video Element (Underneath cover image) -->
+                    <MediaElement x:Name="FullscreenMotionVideo"
+                                  Stretch="Uniform"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  LoadedBehavior="Manual"
+                                  UnloadedBehavior="Manual"
+                                  Volume="0"
+                                  IsMuted="True"
+                                  ScrubbingEnabled="True"
+                                  Opacity="1.0"
+                                  IsHitTestVisible="False"
+                                  MediaOpened="FullscreenMotionVideo_MediaOpened"
+                                  MediaEnded="FullscreenMotionVideo_MediaEnded"
+                                  MediaFailed="FullscreenMotionVideo_MediaFailed"/>
+
+                    <!-- High-Res Static Album Cover Base (On top of video, shields user from video loading artifacts) -->
+                    <Image x:Name="FullscreenCoverImage"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           IsHitTestVisible="False"
+                           Opacity="1.0"
+                           RenderOptions.BitmapScalingMode="Linear"/>
+                </Grid>
+            </Border>
 
             <!-- Top Floating Header Bar (Subtle & Minimalist, reveals on hover) -->
             <Grid x:Name="MotionHeaderBar" VerticalAlignment="Top" Margin="48,32,48,0" Panel.ZIndex="10">
@@ -1571,6 +1827,7 @@
                         Style="{StaticResource FrostedPillButton}"
                         Padding="16,7"
                         Click="ExitMotion_Click"
+                        AutomationProperties.Name="Close Fullscreen Motion Artwork"
                         ToolTip="Return to Player (Esc / Double-click)">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -1583,7 +1840,7 @@
             <Border x:Name="MotionHintPill"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Margin="0,0,0,36"
+                    Margin="0,0,0,116"
                     Background="#30000000"
                     BorderBrush="#1AFFFFFF"
                     BorderThickness="1"
@@ -1594,6 +1851,173 @@
                            FontSize="11"
                            Foreground="#80FFFFFF"/>
             </Border>
+
+            <!-- Bottom Floating Player Control Bar (1:1 Match with Reference Design) -->
+            <Border x:Name="MotionPlayerBar"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,36"
+                    Height="66"
+                    MinWidth="720"
+                    MaxWidth="840"
+                    Background="#EA120C17"
+                    BorderThickness="1"
+                    CornerRadius="33"
+                    Padding="22,0,16,0"
+                    Panel.ZIndex="20"
+                    MouseLeftButtonDown="MotionPlayerBar_MouseLeftButtonDown"
+                    PreviewMouseLeftButtonDown="MotionPlayerBar_PreviewMouseLeftButtonDown">
+                <Border.BorderBrush>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#45FFFFFF" Offset="0"/>
+                        <GradientStop Color="#18FFFFFF" Offset="0.55"/>
+                        <GradientStop Color="#0DFFFFFF" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.BorderBrush>
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="6" Direction="270" Opacity="0.60"/>
+                </Border.Effect>
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: Interactive Timeline Scrubber & Timestamps -->
+                    <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0">
+                        <StackPanel VerticalAlignment="Center">
+                            <!-- Track & Knob Container -->
+                            <Grid x:Name="MotionTimelineTrackContainer"
+                                  Height="18"
+                                  Cursor="Hand"
+                                  Background="Transparent"
+                                  ClipToBounds="False"
+                                  MouseLeftButtonDown="MotionTimeline_MouseLeftButtonDown"
+                                  MouseMove="MotionTimeline_MouseMove"
+                                  MouseLeftButtonUp="MotionTimeline_MouseLeftButtonUp">
+
+                                <!-- Background Track -->
+                                <Border Height="3"
+                                        CornerRadius="1.5"
+                                        Background="#28FFFFFF"
+                                        VerticalAlignment="Center"/>
+
+                                <!-- Elapsed Track Fill -->
+                                <Border x:Name="MotionTimelineProgressBar"
+                                        Height="3"
+                                        CornerRadius="1.5"
+                                        Background="#FFFFFFFF"
+                                        HorizontalAlignment="Left"
+                                        Width="1"
+                                        VerticalAlignment="Center"
+                                        RenderTransformOrigin="0,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="MotionProgressBarScale" ScaleX="0.001" ScaleY="1.0"/>
+                                    </Border.RenderTransform>
+                                </Border>
+
+                                <!-- Scrubber Knob (10x10 white pill/circle) -->
+                                <Border x:Name="MotionTimelineKnob"
+                                        Width="10" Height="10"
+                                        CornerRadius="5"
+                                        Background="#FFFFFFFF"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="MotionKnobTranslate" X="-5" Y="0"/>
+                                    </Border.RenderTransform>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#000000" BlurRadius="5" ShadowDepth="1" Opacity="0.50"/>
+                                    </Border.Effect>
+                                </Border>
+                            </Grid>
+
+                            <!-- Elapsed and Remaining Timestamps Below Track -->
+                            <DockPanel Margin="0,2,0,0">
+                                <TextBlock x:Name="MotionPositionText"
+                                           Text="0:00"
+                                           FontSize="11"
+                                           FontWeight="Medium"
+                                           Foreground="#80FFFFFF"
+                                           HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="MotionDurationText"
+                                           DockPanel.Dock="Right"
+                                           Text="-0:00"
+                                           FontSize="11"
+                                           FontWeight="Medium"
+                                           Foreground="#80FFFFFF"
+                                           HorizontalAlignment="Right"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Right: Transport Controls (Shuffle, Prev, Hero Play/Pause, Next, Repeat) -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Right">
+                        <!-- Shuffle -->
+                        <Button x:Name="MotionShuffleButton"
+                                Style="{StaticResource TransportCircleButton}"
+                                Margin="0,0,12,0"
+                                Click="Shuffle_Click"
+                                ToolTip="Shuffle">
+                            <TextBlock Text="&#xE8B1;"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                       FontSize="13"/>
+                        </Button>
+
+                        <!-- Previous -->
+                        <Button x:Name="MotionPrevButton"
+                                Style="{StaticResource TransportCircleButton}"
+                                Margin="0,0,14,0"
+                                Click="Prev_Click"
+                                ToolTip="Previous Track (Left Arrow)">
+                            <TextBlock Text="&#xE892;"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                       FontSize="14"/>
+                        </Button>
+
+                        <!-- Hero Play / Pause Button with White Halo -->
+                        <Button x:Name="MotionPlayPauseButton"
+                                Style="{StaticResource TransportHeroPlayButton}"
+                                Width="50" Height="50"
+                                Margin="0,0,14,0"
+                                Click="PlayPause_Click"
+                                ToolTip="Play / Pause (Space)">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#FFFFFF" BlurRadius="16" ShadowDepth="0" Opacity="0.45"/>
+                            </Button.Effect>
+                            <TextBlock x:Name="MotionPlayPauseIcon"
+                                       Text="&#xE769;"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                       FontSize="18"/>
+                        </Button>
+
+                        <!-- Next -->
+                        <Button x:Name="MotionNextButton"
+                                Style="{StaticResource TransportCircleButton}"
+                                Margin="0,0,12,0"
+                                Click="Next_Click"
+                                ToolTip="Next Track (Right Arrow)">
+                            <TextBlock Text="&#xE893;"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                       FontSize="14"/>
+                        </Button>
+
+                        <!-- Repeat -->
+                        <Button x:Name="MotionRepeatButton"
+                                Style="{StaticResource TransportCircleButton}"
+                                Click="Repeat_Click"
+                                ToolTip="Repeat">
+                            <TextBlock Text="&#xE8EE;"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                       FontSize="13"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
 
         <!-- ========================================================= -->
@@ -1602,111 +2026,148 @@
         <Border x:Name="QuickGlowControlsCard"
                 HorizontalAlignment="Right" VerticalAlignment="Center"
                 Margin="0,0,48,0"
-                Width="320"
-                Background="#E5140D17"
-                BorderBrush="#38FFFFFF"
+                Width="356"
+                Background="#EA110C14"
+                BorderBrush="#35FFFFFF"
                 BorderThickness="1"
-                CornerRadius="24"
-                Padding="22,20"
+                CornerRadius="22"
+                Padding="20,18"
                 Visibility="Collapsed">
             <Border.Effect>
                 <DropShadowEffect Color="#000000" BlurRadius="35" ShadowDepth="10" Opacity="0.65"/>
             </Border.Effect>
             <StackPanel>
                 <DockPanel Margin="0,0,0,16">
-                    <TextBlock Text="Live Glow Controls" FontWeight="Bold" FontSize="14" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                    <TextBlock Text="Live Glow Controls" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF" VerticalAlignment="Center"/>
                     <Button Content="✕" DockPanel.Dock="Right" HorizontalAlignment="Right"
                             Style="{StaticResource FrostedMiniCircleButton}"
-                            Width="28" Height="28" FontSize="11" Click="CloseQuickControls_Click"/>
+                            Width="26" Height="26" FontSize="11" Click="CloseQuickControls_Click"
+                            AutomationProperties.Name="Close Live Glow Controls"
+                            ToolTip="Close Live Glow Controls"/>
                 </DockPanel>
 
-                <!-- Custom Glow Color Override & Dropper -->
-                <Border Margin="0,0,0,14"
+                <!-- Custom Glow Color Override & Dropper Box (Redesigned matching screenshot) -->
+                <Border Margin="0,0,0,16"
                         Background="#14FFFFFF"
                         BorderBrush="#25FFFFFF"
                         BorderThickness="1"
-                        CornerRadius="14"
-                        Padding="12,10">
+                        CornerRadius="18"
+                        Padding="16,14">
                     <StackPanel>
-                        <DockPanel Margin="0,0,0,8">
-                            <TextBlock Text="Glow Color" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <!-- Header with Dropdown Pill -->
+                        <DockPanel Margin="0,0,0,14">
+                            <TextBlock Text="Glow Color" FontSize="16" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center"/>
                             <Border x:Name="ColorModeBadge"
-                                    DockPanel.Dock="Right"
-                                    Background="#25FFFFFF"
-                                    CornerRadius="8"
-                                    Padding="8,2"
-                                    VerticalAlignment="Center">
-                                <TextBlock x:Name="ColorModeBadgeText"
-                                           Text="Auto (Album Art)"
-                                           FontSize="10"
-                                           FontWeight="Medium"
-                                           Foreground="#B0FFFFFF"/>
+                                     DockPanel.Dock="Right"
+                                     Background="#25FFFFFF"
+                                     BorderBrush="#22FFFFFF"
+                                     BorderThickness="1"
+                                     CornerRadius="14"
+                                     Padding="12,5"
+                                     VerticalAlignment="Center"
+                                     Cursor="Hand"
+                                     MouseLeftButtonDown="ColorAuto_Click"
+                                     ToolTip="Click to toggle or reset back to Auto (Album Art)">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock x:Name="ColorModeBadgeText"
+                                               Text="Auto (Album Art)"
+                                               FontSize="11.5"
+                                               FontWeight="Medium"
+                                               Foreground="#D5FFFFFF"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="&#xE70D;"
+                                               FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                                               FontSize="9"
+                                               Foreground="#A0FFFFFF"
+                                               Margin="8,1,0,0"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Border>
                         </DockPanel>
 
-                        <!-- Quick Palette Swatches -->
-                        <WrapPanel Margin="0,0,0,8" Orientation="Horizontal" HorizontalAlignment="Center">
-                            <!-- Auto Revert Button -->
-                            <Button x:Name="ColorAutoButton"
-                                    Width="24" Height="24"
-                                    Margin="2.5"
-                                    Click="ColorAuto_Click"
-                                    ToolTip="Automatic: Extract from Album Art"
-                                    Style="{StaticResource ColorSwatchCircleButton}">
-                                <TextBlock Text="✦" FontSize="11" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Button>
-                            
-                            <Button Width="24" Height="24" Margin="2.5" Background="#00F2FE" Click="ColorSwatch_Click" ToolTip="Neon Cyan" Style="{StaticResource ColorSwatchCircleButton}" Tag="#00F2FE"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#FF007F" Click="ColorSwatch_Click" ToolTip="Vivid Magenta" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FF007F"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#7928CA" Click="ColorSwatch_Click" ToolTip="Cyber Violet" Style="{StaticResource ColorSwatchCircleButton}" Tag="#7928CA"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#FF5E3A" Click="ColorSwatch_Click" ToolTip="Sunset Amber" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FF5E3A"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#00F5A0" Click="ColorSwatch_Click" ToolTip="Emerald Mint" Style="{StaticResource ColorSwatchCircleButton}" Tag="#00F5A0"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#00A8FF" Click="ColorSwatch_Click" ToolTip="Electric Blue" Style="{StaticResource ColorSwatchCircleButton}" Tag="#00A8FF"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#FFD200" Click="ColorSwatch_Click" ToolTip="Solar Gold" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FFD200"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#FF1E56" Click="ColorSwatch_Click" ToolTip="Deep Crimson" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FF1E56"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#FFFFFF" Click="ColorSwatch_Click" ToolTip="Pure White" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FFFFFF"/>
-                            <Button Width="24" Height="24" Margin="2.5" Background="#33FFFFFF" Click="MoreColors_Click" ToolTip="Custom Color Picker..." Style="{StaticResource ColorSwatchCircleButton}">
-                                <TextBlock Text="🎨" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Button>
-                        </WrapPanel>
-
-                        <!-- Dropper & Reset Buttons Row -->
-                        <Grid Margin="0,2,0,2">
+                        <!-- 8-Column Swatches Grid matching screenshot 2 -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="12"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
-                            <Button x:Name="QuickDropperButton"
-                                    Grid.Column="0"
-                                    Margin="0,0,6,0"
-                                    Height="28"
-                                    Style="{StaticResource FrostedPillButton}"
-                                    Click="StartColorDropper_Click"
-                                    ToolTip="Pick color from anywhere on screen">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xEF3C;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Color Dropper" FontSize="11" FontWeight="Medium" VerticalAlignment="Center"/>
-                                </StackPanel>
+                            <!-- Row 0: 8 Swatches -->
+                            <!-- Col 0: Auto Swatch (with Glowing Ring & Checkmark) -->
+                            <Button x:Name="ColorAutoButton"
+                                    Grid.Row="0" Grid.Column="0"
+                                    Width="28" Height="28"
+                                    Click="ColorAuto_Click"
+                                    AutomationProperties.Name="Auto Extract Color from Album Art"
+                                    ToolTip="Auto: Extract from Album Art"
+                                    Style="{StaticResource ColorSwatchCircleButton}"
+                                    Background="#20FFFFFF"
+                                    BorderBrush="#FFFFFF"
+                                    BorderThickness="2">
+                                <Button.Effect>
+                                    <DropShadowEffect x:Name="ColorAutoGlow" Color="#FFFFFF" BlurRadius="8" ShadowDepth="0" Opacity="0.85"/>
+                                </Button.Effect>
+                                <TextBlock x:Name="ColorAutoCheckmark" Text="&#x2713;" FontSize="13" FontWeight="Bold" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Button>
 
-                            <Button x:Name="ResetToAutoButton"
-                                    Grid.Column="1"
-                                    Height="28"
-                                    Padding="10,0"
-                                    Style="{StaticResource FrostedPillButton}"
-                                    Click="ColorAuto_Click"
-                                    ToolTip="Revert back to automatic album color"
-                                    Visibility="Collapsed">
-                                <TextBlock Text="Reset" FontSize="11" FontWeight="Medium"/>
+                            <!-- Col 1: Cyan -->
+                            <Button x:Name="SwatchCyan" Grid.Row="0" Grid.Column="1" Width="28" Height="28" Background="#00E5FF" Click="ColorSwatch_Click" AutomationProperties.Name="Cyan color" ToolTip="Cyan" Style="{StaticResource ColorSwatchCircleButton}" Tag="#00E5FF"/>
+                            <!-- Col 2: Magenta / Pink -->
+                            <Button x:Name="SwatchMagenta" Grid.Row="0" Grid.Column="2" Width="28" Height="28" Background="#FF007F" Click="ColorSwatch_Click" AutomationProperties.Name="Magenta Pink color" ToolTip="Magenta Pink" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FF007F"/>
+                            <!-- Col 3: Purple / Violet -->
+                            <Button x:Name="SwatchPurple" Grid.Row="0" Grid.Column="3" Width="28" Height="28" Background="#7C4DFF" Click="ColorSwatch_Click" AutomationProperties.Name="Cyber Violet color" ToolTip="Cyber Violet" Style="{StaticResource ColorSwatchCircleButton}" Tag="#7C4DFF"/>
+                            <!-- Col 4: Orange -->
+                            <Button x:Name="SwatchOrange" Grid.Row="0" Grid.Column="4" Width="28" Height="28" Background="#FF6D00" Click="ColorSwatch_Click" AutomationProperties.Name="Sunset Orange color" ToolTip="Sunset Orange" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FF6D00"/>
+                            <!-- Col 5: Emerald Mint Green -->
+                            <Button x:Name="SwatchMint" Grid.Row="0" Grid.Column="5" Width="28" Height="28" Background="#00E676" Click="ColorSwatch_Click" AutomationProperties.Name="Emerald Mint color" ToolTip="Emerald Mint" Style="{StaticResource ColorSwatchCircleButton}" Tag="#00E676"/>
+                            <!-- Col 6: Blue -->
+                            <Button x:Name="SwatchBlue" Grid.Row="0" Grid.Column="6" Width="28" Height="28" Background="#0077FF" Click="ColorSwatch_Click" AutomationProperties.Name="Electric Blue color" ToolTip="Electric Blue" Style="{StaticResource ColorSwatchCircleButton}" Tag="#0077FF"/>
+                            <!-- Col 7: Yellow -->
+                            <Button x:Name="SwatchYellow" Grid.Row="0" Grid.Column="7" Width="28" Height="28" Background="#FFD600" Click="ColorSwatch_Click" AutomationProperties.Name="Solar Gold color" ToolTip="Solar Gold" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FFD600"/>
+
+                            <!-- Row 2: 3 Swatches (Aligned under Col 0, 1, 2) -->
+                            <!-- Col 0: Crimson Red -->
+                            <Button x:Name="SwatchRed" Grid.Row="2" Grid.Column="0" Width="28" Height="28" Background="#FF2A55" Click="ColorSwatch_Click" AutomationProperties.Name="Crimson Red color" ToolTip="Crimson Red" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FF2A55"/>
+                            <!-- Col 1: Pure White -->
+                            <Button x:Name="SwatchWhite" Grid.Row="2" Grid.Column="1" Width="28" Height="28" Background="#FFFFFF" Click="ColorSwatch_Click" AutomationProperties.Name="Pure White color" ToolTip="Pure White" Style="{StaticResource ColorSwatchCircleButton}" Tag="#FFFFFF"/>
+                            <!-- Col 2: Dropper Icon Button -->
+                            <Button x:Name="SwatchDropper" Grid.Row="2" Grid.Column="2" Width="28" Height="28" Background="#28FFFFFF" BorderBrush="#35FFFFFF" BorderThickness="1" Click="MoreColors_Click" AutomationProperties.Name="Custom Color Palette" ToolTip="Custom Color Palette..." Style="{StaticResource ColorSwatchCircleButton}">
+                                <TextBlock Text="&#xEF3C;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Button>
                         </Grid>
 
+                        <!-- Full Width Color Dropper Pill Button -->
+                        <Button x:Name="QuickDropperButton"
+                                Margin="0,16,0,0"
+                                Height="40"
+                                Style="{StaticResource ColorDropperLiquidGlassButton}"
+                                Click="StartColorDropper_Click"
+                                AutomationProperties.Name="Pick Color from Screen"
+                                ToolTip="Pick any color from screen">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="&#xEF3C;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="13" Foreground="#FFFFFF" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Color Dropper" FontSize="12.5" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Subtitle -->
                         <TextBlock Text="Custom colors reset to auto when next song plays."
-                                   FontSize="9.5"
+                                   FontSize="10.5"
                                    Foreground="#80FFFFFF"
-                                   Margin="0,6,0,0"
-                                   TextAlignment="Center"/>
+                                   Margin="0,12,0,0"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -1716,14 +2177,16 @@
                     <TextBlock x:Name="BrightnessValText" Text="85%" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Right"/>
                 </DockPanel>
                 <Slider x:Name="BrightnessSlider" Style="{StaticResource AppleSlider}" Minimum="20" Maximum="150" Value="85" Margin="0,0,0,14"
+                        AutomationProperties.Name="Glow Brightness"
                         ValueChanged="BrightnessSlider_ValueChanged"/>
 
-                <!-- Glow Thickness / Spread -->
+                <!-- Glow Spread -->
                 <DockPanel Margin="0,0,0,6">
-                    <TextBlock Text="Glow Thickness" FontSize="12" FontWeight="Medium" Foreground="#B0FFFFFF"/>
+                    <TextBlock Text="Glow Spread" FontSize="12" FontWeight="Medium" Foreground="#B0FFFFFF"/>
                     <TextBlock x:Name="SpreadValText" Text="120 px" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Right"/>
                 </DockPanel>
                 <Slider x:Name="SpreadSlider" Style="{StaticResource AppleSlider}" Minimum="50" Maximum="260" Value="120" Margin="0,0,0,14"
+                        AutomationProperties.Name="Glow Spread"
                         ValueChanged="SpreadSlider_ValueChanged"/>
 
                 <!-- TV Backdrop Brightness -->
@@ -1732,6 +2195,7 @@
                     <TextBlock x:Name="BackdropValText" Text="70%" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Right"/>
                 </DockPanel>
                 <Slider x:Name="BackdropSlider" Style="{StaticResource AppleSlider}" Minimum="0" Maximum="100" Value="70" Margin="0,0,0,14"
+                        AutomationProperties.Name="Backdrop Ambient Brightness"
                         ValueChanged="BackdropSlider_ValueChanged"/>
 
                 <!-- Rotation Speed -->
@@ -1740,6 +2204,7 @@
                     <TextBlock x:Name="SpeedValText" Text="1.0x" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Right"/>
                 </DockPanel>
                 <Slider x:Name="SpeedSlider" Style="{StaticResource AppleSlider}" Minimum="0" Maximum="250" Value="100" Margin="0,0,0,14"
+                        AutomationProperties.Name="Rotation Speed"
                         ValueChanged="SpeedSlider_ValueChanged"/>
 
                 <!-- Audio Reactivity -->
@@ -1748,6 +2213,7 @@
                     <TextBlock x:Name="ReactivityValText" Text="1.0x" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Right"/>
                 </DockPanel>
                 <Slider x:Name="ReactivitySlider" Style="{StaticResource AppleSlider}" Minimum="0" Maximum="200" Value="100" Margin="0,0,0,14"
+                        AutomationProperties.Name="Music Reactivity"
                         ValueChanged="ReactivitySlider_ValueChanged"/>
 
                 <!-- Master Volume -->
@@ -1756,6 +2222,7 @@
                     <TextBlock x:Name="QuickVolumeValText" Text="70%" FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Right"/>
                 </DockPanel>
                 <Slider x:Name="QuickVolumeSlider" Style="{StaticResource AppleSlider}" Minimum="0" Maximum="100" Value="70" Margin="0,0,0,6"
+                        AutomationProperties.Name="Master Volume"
                         ValueChanged="QuickVolumeSlider_ValueChanged"/>
             </StackPanel>
         </Border>

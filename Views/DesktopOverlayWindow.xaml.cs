@@ -228,6 +228,7 @@ namespace LmenV2.Views
         }
 
         private bool _lastHoverAtBottom = false;
+        private IntPtr _cachedTaskbarHwnd = IntPtr.Zero;
 
         private void UpdateTaskbarHover()
         {
@@ -241,10 +242,19 @@ namespace LmenV2.Views
                 // Check if cursor is within bottom 8px or over taskbar
                 bool isAtBottom = (pt.Y >= screenH - 8) && pt.X >= 0 && pt.X <= screenW;
 
-                IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
-                if (taskbarHwnd != IntPtr.Zero)
+                if (!isAtBottom && !_lastHoverAtBottom)
                 {
-                    GetWindowRect(taskbarHwnd, out Win32Rect tbRect);
+                    return;
+                }
+
+                if (_cachedTaskbarHwnd == IntPtr.Zero)
+                {
+                    _cachedTaskbarHwnd = FindWindow("Shell_TrayWnd", null);
+                }
+
+                if (_cachedTaskbarHwnd != IntPtr.Zero)
+                {
+                    GetWindowRect(_cachedTaskbarHwnd, out Win32Rect tbRect);
                     bool isOverTaskbar = (pt.X >= tbRect.Left && pt.X <= tbRect.Right && pt.Y >= tbRect.Top && pt.Y <= tbRect.Bottom);
                     if (isOverTaskbar) isAtBottom = true;
                 }

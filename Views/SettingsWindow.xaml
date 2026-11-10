@@ -14,6 +14,8 @@
         TextOptions.TextFormattingMode="Ideal"
         WindowStyle="None"
         AllowsTransparency="True"
+        Topmost="True"
+        ShowActivated="True"
         Loaded="Window_Loaded">
 
     <Window.Resources>
@@ -731,6 +733,7 @@
                                 VerticalAlignment="Top"
                                 Margin="0,2,0,0"
                                 Click="Close_Click"
+                                AutomationProperties.Name="Close settings"
                                 ToolTip="Close settings">
                             <TextBlock Text="&#xE8BB;"
                                        FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
@@ -773,6 +776,7 @@
                                     Grid.Column="0"
                                     Style="{StaticResource SegmentSelectedButton}"
                                     Click="FullscreenMode_Click"
+                                    AutomationProperties.Name="Fullscreen Visualizer mode"
                                     ToolTip="Show the fullscreen ambient visualizer">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE740;"
@@ -791,6 +795,7 @@
                                     Grid.Column="1"
                                     Style="{StaticResource SegmentButton}"
                                     Click="OverlayMode_Click"
+                                    AutomationProperties.Name="Desktop Overlay mode"
                                     ToolTip="Show the click-through desktop edge overlay">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE7F4;"
@@ -869,6 +874,7 @@
                             <Button Style="{StaticResource TintedButton}"
                                     HorizontalAlignment="Left"
                                     Click="OpenWindowsGraphicsSettings_Click"
+                                    AutomationProperties.Name="Open Windows Graphics Settings"
                                     ToolTip="Verify and manage Windows OS High Performance GPU assignments">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE713;"
@@ -934,6 +940,7 @@
                             <Slider x:Name="SettingsVolumeSlider"
                                     Style="{StaticResource AppleSlider}"
                                     Minimum="0" Maximum="100" Value="70"
+                                    AutomationProperties.Name="Master Volume"
                                     ValueChanged="SettingsVolumeSlider_ValueChanged"/>
 
                             <Border Height="1" Background="#EFEFF4" Margin="0,12,0,14"/>
@@ -966,6 +973,7 @@
                                     Style="{StaticResource AppleSlider}"
                                     Minimum="20" Maximum="150" Value="85"
                                     Margin="0,0,0,14"
+                                    AutomationProperties.Name="Glow Brightness"
                                     ValueChanged="BrightnessSlider_ValueChanged"/>
 
                             <Grid Margin="0,0,0,2">
@@ -984,10 +992,11 @@
                                     Style="{StaticResource AppleSlider}"
                                     Minimum="0" Maximum="100" Value="70"
                                     Margin="0,0,0,14"
+                                    AutomationProperties.Name="Backdrop Ambient Brightness"
                                     ValueChanged="BackdropSlider_ValueChanged"/>
 
                             <Grid Margin="0,0,0,2">
-                                <TextBlock Text="Glow Spread (Depth into screen)"
+                                <TextBlock Text="Glow Spread"
                                            FontSize="12.5"
                                            FontWeight="Medium"
                                            Foreground="#1C1C1E"/>
@@ -1002,6 +1011,7 @@
                                     Style="{StaticResource AppleSlider}"
                                     Minimum="50" Maximum="260" Value="120"
                                     Margin="0,0,0,14"
+                                    AutomationProperties.Name="Glow Spread"
                                     ValueChanged="SpreadSlider_ValueChanged"/>
 
                             <Grid Margin="0,0,0,2">
@@ -1020,6 +1030,7 @@
                                     Style="{StaticResource AppleSlider}"
                                     Minimum="0" Maximum="250" Value="100"
                                     Margin="0,0,0,14"
+                                    AutomationProperties.Name="Rotation Speed"
                                     ValueChanged="SpeedSlider_ValueChanged"/>
 
                             <Grid Margin="0,0,0,2">
@@ -1038,6 +1049,7 @@
                                     Style="{StaticResource AppleSlider}"
                                     Minimum="0" Maximum="200" Value="100"
                                     Margin="0,0,0,14"
+                                    AutomationProperties.Name="Music Reactivity"
                                     ValueChanged="ReactivitySlider_ValueChanged"/>
 
                             <Grid Margin="0,0,0,2">
@@ -1055,13 +1067,14 @@
                             <Slider x:Name="BreathingSlider"
                                     Style="{StaticResource AppleSlider}"
                                     Minimum="0" Maximum="100" Value="70"
+                                    AutomationProperties.Name="Breathing Effect Amount"
                                     ValueChanged="BreathingSlider_ValueChanged"/>
                         </StackPanel>
                     </Border>
 
                     <!-- LYRICS -->
                     <TextBlock Text="LYRICS &amp; SOURCES" Style="{StaticResource SectionLabel}"/>
-                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,6">
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <Border Style="{StaticResource IconTile}">
@@ -1115,6 +1128,75 @@
                                      TextChanged="PaxSenixApiKeyBox_TextChanged"/>
                         </StackPanel>
                     </Border>
+
+                    <!-- MOTION ARTWORK -->
+                    <TextBlock Text="ANIMATED ALBUM COVERS &amp; MOTION CANVAS" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource IconTile}">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#00E5FF" Offset="0"/>
+                                            <GradientStop Color="#10B981" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <TextBlock Text="&#xE714;"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               FontSize="14"
+                                               Foreground="#FFFFFF"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Motion Artwork Engine"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="#000000"/>
+                                    <TextBlock Text="Looping video covers across Apple Music, Tidal, Canvas &amp; Spotify"
+                                               FontSize="11"
+                                               Foreground="#8E8E93"
+                                               Margin="0,1,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border Height="1" Background="#EFEFF4" Margin="0,12,0,14"/>
+
+                            <CheckBox x:Name="EnableMotionArtworkCheckBox"
+                                      Style="{StaticResource AppleSwitch}"
+                                      Content="Enable Animated Album Artwork &amp; Motion Covers"
+                                      Checked="EnableMotionArtwork_Checked"
+                                      Unchecked="EnableMotionArtwork_Unchecked"/>
+
+                            <TextBlock Text="Streams and local-disk caches seamless looping motion videos. Double-click the album cover or press M to enter Fullscreen Motion mode."
+                                       FontSize="11"
+                                       Foreground="#8E8E93"
+                                       TextWrapping="Wrap"
+                                       LineHeight="16"
+                                       Margin="44,2,0,14"/>
+
+                            <CheckBox x:Name="PrioritizeSpotifyCanvasCheckBox"
+                                      Style="{StaticResource AppleSwitch}"
+                                      Content="Prioritize Spotify Canvas over Apple Music &amp; Tidal"
+                                      Checked="PrioritizeSpotifyCanvas_Checked"
+                                      Unchecked="PrioritizeSpotifyCanvas_Unchecked"/>
+
+                            <TextBlock Text="Spotify sp_dc Cookie (optional)"
+                                       FontSize="13"
+                                       FontWeight="Medium"
+                                       Foreground="#1C1C1E"
+                                       Margin="0,14,0,2"/>
+                            <TextBlock Text="Paste your Spotify sp_dc cookie to unlock Canvas streaming directly from Spotify's servers. Apple Music, Tidal, and Community Canvas work completely without a cookie."
+                                       FontSize="11"
+                                       Foreground="#8E8E93"
+                                       TextWrapping="Wrap"
+                                       LineHeight="16"
+                                       Margin="0,0,0,8"/>
+                            <TextBox x:Name="SpotifySpDcBox"
+                                     Style="{StaticResource AppleTextBox}"
+                                     TextChanged="SpotifySpDcBox_TextChanged"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
 
@@ -1141,6 +1223,7 @@
                                 Padding="26,10"
                                 HorizontalAlignment="Right"
                                 Click="Close_Click"
+                                AutomationProperties.Name="Done"
                                 ToolTip="Close settings"/>
                     </Grid>
                 </Grid>

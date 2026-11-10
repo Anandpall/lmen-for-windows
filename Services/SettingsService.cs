@@ -16,6 +16,9 @@ namespace LmenV2.Services
         public string PaxSenixApiKey { get; set; } = string.Empty;
         public int LyricsOffsetMs { get; set; } = 0;             // manual lyric sync offset
         public string LyricsTranslationLanguage { get; set; } = "en";
+        public bool EnableMotionArtwork { get; set; } = true;
+        public bool PrioritizeSpotifyCanvas { get; set; } = false;
+        public string SpotifySpDcCookie { get; set; } = string.Empty;
     }
 
     public class SettingsService
@@ -134,6 +137,36 @@ namespace LmenV2.Services
             set
             {
                 _model.LyricsTranslationLanguage = string.IsNullOrWhiteSpace(value) ? "en" : value;
+                NotifyAndSave();
+            }
+        }
+
+        public bool EnableMotionArtwork
+        {
+            get => _model.EnableMotionArtwork;
+            set
+            {
+                _model.EnableMotionArtwork = value;
+                NotifyAndSave();
+            }
+        }
+
+        public bool PrioritizeSpotifyCanvas
+        {
+            get => _model.PrioritizeSpotifyCanvas;
+            set
+            {
+                _model.PrioritizeSpotifyCanvas = value;
+                NotifyAndSave();
+            }
+        }
+
+        public string SpotifySpDcCookie
+        {
+            get => _model.SpotifySpDcCookie;
+            set
+            {
+                _model.SpotifySpDcCookie = value?.Trim() ?? string.Empty;
                 NotifyAndSave();
             }
         }

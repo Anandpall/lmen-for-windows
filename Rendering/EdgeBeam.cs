@@ -17,7 +17,7 @@ namespace LmenV2.Rendering
     /// </summary>
     public sealed class EdgeBeam
     {
-        private const int StopsPerEdge = 24;
+        private const int StopsPerEdge = 16;
 
         // Relative alpha profile for the depth falloff into the screen (smooth Gaussian curve)
         private static readonly (double Offset, double Alpha)[] FalloffProfile = new[]
@@ -34,6 +34,7 @@ namespace LmenV2.Rendering
         private readonly ShapeRect[] _edgeRects = new ShapeRect[4];
         private readonly LinearGradientBrush[] _edgeFills = new LinearGradientBrush[4];
         private readonly GradientStop[,] _maskStops = new GradientStop[4, StopsPerEdge];
+        private readonly byte[,] _lastMaskAlpha = new byte[4, StopsPerEdge];
         private readonly ScaleTransform[] _edgeTransforms = new ScaleTransform[4];
 
         private readonly ShapeRect[] _cornerRects = new ShapeRect[4];
@@ -45,6 +46,7 @@ namespace LmenV2.Rendering
         private double _perimeter = 6000.0;
         private double _baseSpread = 120.0;
         private double _currentSpread = 120.0;
+        private double _lastAppliedScale = 1.0;
         private double _halfBeam = 1650.0;
         private double _phase;
         private double _overallOpacity = 1.0;
@@ -57,6 +59,14 @@ namespace LmenV2.Rendering
         {
             _current = Color.FromRgb(220, 20, 60);
             _target = _current;
+
+            for (int e = 0; e < 4; e++)
+            {
+                for (int s = 0; s < StopsPerEdge; s++)
+                {
+                    _lastMaskAlpha[e, s] = 255;
+                }
+            }
 
             // 1. Create the 4 Edge Rectangles (0: Top, 1: Right, 2: Bottom, 3: Left)
             for (int e = 0; e < 4; e++)
@@ -276,7 +286,11 @@ namespace LmenV2.Rendering
                         a = (byte)Math.Clamp(Math.Round(intensity * 255.0), 0.0, 255.0);
                     }
 
-                    _maskStops[e, st].Color = Color.FromArgb(a, 255, 255, 255);
+                    if (a != _lastMaskAlpha[e, st])
+                    {
+                        _lastMaskAlpha[e, st] = a;
+                        _maskStops[e, st].Color = Color.FromArgb(a, 255, 255, 255);
+                    }
                 }
 
                 _edgeRects[e].Opacity = _overallOpacity;
@@ -289,7 +303,70 @@ namespace LmenV2.Rendering
             _cornerRects[3].Opacity = GetIntensityAt(2.0 * _width + _height) * _overallOpacity;
         }
 
-        private double GetIntensityAt(double pos)
+        public double Phase => _phase;
+        public double Perimeter => _perimeter;
+        public double HalfBeam => _halfBeam;
+        public double Width => _width;
+        public double Height => _height;
+
+        /// <summary>
+        /// Returns the exact 2D position (X, Y) of the light beam center along the screen perimeter.
+        /// </summary>
+        public Point GetBeamPosition()
+        {
+            if (_perimeter <= 0.0) return new Point(0, 0);
+
+            if (_phase < _width)
+            {
+                // Top edge (traveling left to right)
+                return new Point(_phase, 0.0);
+            }
+            else if (_phase < _width + _height)
+            {
+                // Right edge (traveling top to bottom)
+                return new Point(_width, _phase - _width);
+            }
+            else if (_phase < 2.0 * _width + _height)
+            {
+                // Bottom edge (traveling right to left)
+                return new Point(_width - (_phase - (_width + _height)), _height);
+            }
+            else
+            {
+                // Left edge (traveling bottom to top)
+                return new Point(0.0, _height - (_phase - (2.0 * _width + _height)));
+            }
+        }
+
+        /// <summary>
+        /// Calculates how much light reaches an interior 2D point (x, y) based on beam proximity.
+        /// Returns 0.0 (far away) to 1.0 (light beam is directly adjacent).
+        /// </summary>
+        public double GetIlluminationAtPoint(double x, double y, double reachRadius = 750.0)
+        {
+            Point beamPos = GetBeamPosition();
+            double dx = beamPos.X - x;
+            double dy = beamPos.Y - y;
+            double dist = Math.Sqrt(dx * dx + dy * dy);
+
+            if (dist >= reachRadius || reachRadius <= 0.0) return 0.0;
+
+            double u = dist / reachRadius;
+            return 0.5 + (0.5 * Math.Cos(u * Math.PI));
+        }
+
+        /// <summary>
+        /// Returns the angle in degrees from (x, y) pointing directly towards the light beam center.
+        /// </summary>
+        public double GetLightAngleFromPoint(double x, double y)
+        {
+            Point beamPos = GetBeamPosition();
+            double dx = beamPos.X - x;
+            double dy = beamPos.Y - y;
+            return Math.Atan2(dy, dx) * (180.0 / Math.PI);
+        }
+
+        public double GetIntensityAt(double pos)
         {
             double diff = Math.Abs(pos - _phase);
             double d = Math.Min(diff, _perimeter - diff);
@@ -324,15 +401,19 @@ namespace LmenV2.Rendering
             }
 
             double scale = _baseSpread > 0.0 ? (_currentSpread / _baseSpread) : 1.0;
-            _edgeTransforms[0].ScaleY = scale; // Top
-            _edgeTransforms[1].ScaleX = scale; // Right
-            _edgeTransforms[2].ScaleY = scale; // Bottom
-            _edgeTransforms[3].ScaleX = scale; // Left
-
-            for (int c = 0; c < 4; c++)
+            if (Math.Abs(scale - _lastAppliedScale) > 0.002)
             {
-                _cornerTransforms[c].ScaleX = scale;
-                _cornerTransforms[c].ScaleY = scale;
+                _lastAppliedScale = scale;
+                _edgeTransforms[0].ScaleY = scale; // Top
+                _edgeTransforms[1].ScaleX = scale; // Right
+                _edgeTransforms[2].ScaleY = scale; // Bottom
+                _edgeTransforms[3].ScaleX = scale; // Left
+
+                for (int c = 0; c < 4; c++)
+                {
+                    _cornerTransforms[c].ScaleX = scale;
+                    _cornerTransforms[c].ScaleY = scale;
+                }
             }
 
             UpdateBeamMasks();

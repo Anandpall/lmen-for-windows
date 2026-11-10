@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -50,11 +51,35 @@ namespace LmenV2.Views
         private double _backdropMotionTime = 0.0;
         private bool _activeBackdropIsA = true;
         private ImageSource? _lastBackdropSource;
+        private BitmapSource? _currentBlurredBackdrop;
 
         private Stopwatch _renderTimer = new Stopwatch();
         private TimeSpan _lastFrameTime = TimeSpan.Zero;
         private int _lastDisplayedPosSec = -1;
         private int _lastDisplayedDurSec = -1;
+
+        // Performance optimizations: frame throttling & deadbands
+        private int _renderFrameCount = 0;
+        private double _lastArtShadowDir = double.MinValue;
+        private double _lastArtShadowBlur = double.MinValue;
+        private double _lastArtShadowDepth = double.MinValue;
+        private double _lastArtShadowOpacity = double.MinValue;
+        private Color _lastArtShadowColor = Colors.Transparent;
+
+        private SolidColorBrush? _cardBorderBrush;
+        private double _lastCardShadowBlur = double.MinValue;
+        private double _lastCardShadowOpacity = double.MinValue;
+        private Color _lastCardShadowColor = Colors.Transparent;
+
+        private double _lastGlowShadowBlur = double.MinValue;
+        private double _lastGlowShadowOpacity = double.MinValue;
+        private Color _lastGlowShadowColor = Colors.Transparent;
+
+        private double _lastPlayShadowBlur = double.MinValue;
+        private double _lastPlayShadowOpacity = double.MinValue;
+        private Color _lastPlayShadowColor = Colors.Transparent;
+
+        private IntPtr _cachedTaskbarHwnd = IntPtr.Zero;
 
         // Custom color selection & screen eyedropper
         private bool _isColorDropperActive = false;
@@ -105,6 +130,9 @@ namespace LmenV2.Views
         private bool _isFullscreenMotionActive = false;
         private bool _hasAttemptedFallback = false;
         private System.Windows.Threading.DispatcherTimer? _motionHintTimer;
+        private System.Windows.Threading.DispatcherTimer? _albumVideoFrameTimer;
+        private System.Windows.Threading.DispatcherTimer? _fullscreenVideoFrameTimer;
+        private System.Windows.Threading.DispatcherTimer? _motionBarFadeTimer;
 
         // Display Style: Stage (BitChord) vs Fisheye Lens (Verci)
         public enum LyricDisplayStyle
@@ -302,6 +330,8 @@ namespace LmenV2.Views
             _beam = new EdgeBeam(BeamHost);
 
             _mediaService.TrackUpdated += OnTrackUpdated;
+            _mediaService.TimelineUpdated += OnTimelineUpdated;
+            _mediaService.PlaybackStateChanged += OnPlaybackStateChanged;
             _settings.SettingsChanged += OnSettingsChanged;
             _volumeService.VolumeChanged += OnSystemVolumeChanged;
         }
@@ -334,6 +364,13 @@ namespace LmenV2.Views
             _renderTimer.Start();
             _lastFrameTime = _renderTimer.Elapsed;
             CompositionTarget.Rendering += OnRenderFrame;
+            MotionArtworkService.Instance.VideoCached += OnMotionVideoCached;
+            IsVisibleChanged += FullscreenVisualizerWindow_IsVisibleChanged;
+
+            if (_mediaService.CurrentTrack != null && !string.IsNullOrWhiteSpace(_mediaService.CurrentTrack.Title))
+            {
+                OnTrackUpdated(_mediaService.CurrentTrack);
+            }
         }
 
         private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -379,36 +416,61 @@ namespace LmenV2.Views
             _beam.SetGeometry(w, h, _settings.GlowSpread);
         }
 
+        private bool _suppressSettingsUpdate;
+
         private void OnSettingsChanged()
         {
             Dispatcher.Invoke(() =>
             {
-                BrightnessValText.Text = $"{(int)(_settings.GlowBrightness * 100)}%";
-                SpreadValText.Text = $"{(int)_settings.GlowSpread} px";
-                BackdropValText.Text = $"{(int)(_settings.BackdropBrightness * 100)}%";
-                SpeedValText.Text = $"{_settings.RotationSpeed:0.0}x";
-                ReactivityValText.Text = $"{_settings.AudioReactivity:0.0}x";
+                if (_suppressSettingsUpdate) return;
+                _suppressSettingsUpdate = true;
+                try
+                {
+                    if (BrightnessSlider != null) BrightnessSlider.Value = _settings.GlowBrightness * 100.0;
+                    if (SpreadSlider != null) SpreadSlider.Value = _settings.GlowSpread;
+                    if (BackdropSlider != null) BackdropSlider.Value = _settings.BackdropBrightness * 100.0;
+                    if (SpeedSlider != null) SpeedSlider.Value = _settings.RotationSpeed * 100.0;
+                    if (ReactivitySlider != null) ReactivitySlider.Value = _settings.AudioReactivity * 100.0;
 
-                TvBackdropHost.Opacity = _settings.BackdropBrightness;
-                ApplyGeometry();
+                    if (BrightnessValText != null) BrightnessValText.Text = $"{(int)(_settings.GlowBrightness * 100)}%";
+                    if (SpreadValText != null) SpreadValText.Text = $"{(int)_settings.GlowSpread} px";
+                    if (BackdropValText != null) BackdropValText.Text = $"{(int)(_settings.BackdropBrightness * 100)}%";
+                    if (SpeedValText != null) SpeedValText.Text = $"{_settings.RotationSpeed:0.0}x";
+                    if (ReactivityValText != null) ReactivityValText.Text = $"{_settings.AudioReactivity:0.0}x";
+
+                    if (TvBackdropHost != null) TvBackdropHost.Opacity = _settings.BackdropBrightness;
+                    ApplyGeometry();
+                }
+                finally
+                {
+                    _suppressSettingsUpdate = false;
+                }
             });
         }
 
         private void InitSliderValues()
         {
-            BrightnessSlider.Value = _settings.GlowBrightness * 100.0;
-            SpreadSlider.Value = _settings.GlowSpread;
-            BackdropSlider.Value = _settings.BackdropBrightness * 100.0;
-            SpeedSlider.Value = _settings.RotationSpeed * 100.0;
-            ReactivitySlider.Value = _settings.AudioReactivity * 100.0;
+            _suppressSettingsUpdate = true;
+            try
+            {
+                BrightnessSlider.Value = _settings.GlowBrightness * 100.0;
+                SpreadSlider.Value = _settings.GlowSpread;
+                BackdropSlider.Value = _settings.BackdropBrightness * 100.0;
+                SpeedSlider.Value = _settings.RotationSpeed * 100.0;
+                ReactivitySlider.Value = _settings.AudioReactivity * 100.0;
 
-            BrightnessValText.Text = $"{(int)BrightnessSlider.Value}%";
-            SpreadValText.Text = $"{(int)SpreadSlider.Value} px";
-            BackdropValText.Text = $"{(int)BackdropSlider.Value}%";
-            SpeedValText.Text = $"{_settings.RotationSpeed:0.0}x";
-            ReactivityValText.Text = $"{_settings.AudioReactivity:0.0}x";
+                BrightnessValText.Text = $"{(int)BrightnessSlider.Value}%";
+                SpreadValText.Text = $"{(int)SpreadSlider.Value} px";
+                BackdropValText.Text = $"{(int)BackdropSlider.Value}%";
+                SpeedValText.Text = $"{_settings.RotationSpeed:0.0}x";
+                ReactivityValText.Text = $"{_settings.AudioReactivity:0.0}x";
 
-            TvBackdropHost.Opacity = _settings.BackdropBrightness;
+                TvBackdropHost.Opacity = _settings.BackdropBrightness;
+            }
+            finally
+            {
+                _suppressSettingsUpdate = false;
+            }
         }
 
         private void OnRenderFrame(object? sender, EventArgs e)
@@ -478,7 +540,150 @@ namespace LmenV2.Views
             _beam.Render(brightness, breath, energy);
             _beam.EaseColor(dt);
 
-            // 3. TV AMBIENT FLOATING BACKDROP: Organic random sway motion (Up, Down, Right, Left)
+            // 2.5 REAL-TIME LIGHT PROXIMITY & SPECULAR REFLECTION:
+            // Sub-sampled to every 2nd frame with deadband thresholds to eliminate continuous DropShadow invalidation
+            _renderFrameCount++;
+            if ((_renderFrameCount & 1) == 0)
+            {
+                Color currentLightColor = _beam.CurrentColor;
+                double winW = ActualWidth > 0 ? ActualWidth : 1920.0;
+                double winH = ActualHeight > 0 ? ActualHeight : 1080.0;
+
+                // (a) Album Art Dynamic Directional Ambient Glow & Shadow:
+                if (ArtDropShadow != null)
+                {
+                    double artCenterX = winW * 0.5;
+                    double artCenterY = winH * 0.44;
+                    double artLightIllum = _beam.GetIlluminationAtPoint(artCenterX, artCenterY, reachRadius: winW * 0.65);
+                    double lightAngle = _beam.GetLightAngleFromPoint(artCenterX, artCenterY);
+
+                    double targetDir = lightAngle + 180.0;
+                    double targetBlur = 24.0 + (artLightIllum * 52.0);
+                    double targetDepth = 4.0 + (artLightIllum * 16.0);
+                    double targetOpacity = 0.28 + (artLightIllum * 0.55);
+
+                    if (_lastArtShadowColor != currentLightColor)
+                    {
+                        _lastArtShadowColor = currentLightColor;
+                        ArtDropShadow.Color = currentLightColor;
+                    }
+                    if (Math.Abs(targetDir - _lastArtShadowDir) >= 2.0)
+                    {
+                        _lastArtShadowDir = targetDir;
+                        ArtDropShadow.Direction = targetDir;
+                    }
+                    if (Math.Abs(targetBlur - _lastArtShadowBlur) >= 1.5)
+                    {
+                        _lastArtShadowBlur = targetBlur;
+                        ArtDropShadow.BlurRadius = targetBlur;
+                    }
+                    if (Math.Abs(targetDepth - _lastArtShadowDepth) >= 1.0)
+                    {
+                        _lastArtShadowDepth = targetDepth;
+                        ArtDropShadow.ShadowDepth = targetDepth;
+                    }
+                    if (Math.Abs(targetOpacity - _lastArtShadowOpacity) >= 0.02)
+                    {
+                        _lastArtShadowOpacity = targetOpacity;
+                        ArtDropShadow.Opacity = targetOpacity;
+                    }
+                }
+
+                // (b) Live Glow Controls Card Specular Reflection:
+                // Only evaluated if the card is actively opened!
+                if (QuickGlowControlsCard != null && QuickGlowControlsCard.Visibility == Visibility.Visible)
+                {
+                    double cardCenterX = winW - 200.0;
+                    double cardCenterY = winH * 0.50;
+                    double cardLightIllum = _beam.GetIlluminationAtPoint(cardCenterX, cardCenterY, reachRadius: 650.0);
+
+                    byte rimAlpha = (byte)Math.Clamp(30 + (cardLightIllum * 160.0), 30, 220);
+                    if (_cardBorderBrush == null)
+                    {
+                        _cardBorderBrush = new SolidColorBrush();
+                        QuickGlowControlsCard.BorderBrush = _cardBorderBrush;
+                    }
+                    _cardBorderBrush.Color = Color.FromArgb(rimAlpha, currentLightColor.R, currentLightColor.G, currentLightColor.B);
+
+                    if (QuickGlowControlsCard.Effect is DropShadowEffect cardShadow)
+                    {
+                        double targetCardOpacity = 0.30 + (cardLightIllum * 0.45);
+                        double targetCardBlur = 24.0 + (cardLightIllum * 26.0);
+
+                        if (_lastCardShadowColor != currentLightColor)
+                        {
+                            _lastCardShadowColor = currentLightColor;
+                            cardShadow.Color = currentLightColor;
+                        }
+                        if (Math.Abs(targetCardOpacity - _lastCardShadowOpacity) >= 0.02)
+                        {
+                            _lastCardShadowOpacity = targetCardOpacity;
+                            cardShadow.Opacity = targetCardOpacity;
+                        }
+                        if (Math.Abs(targetCardBlur - _lastCardShadowBlur) >= 1.5)
+                        {
+                            _lastCardShadowBlur = targetCardBlur;
+                            cardShadow.BlurRadius = targetCardBlur;
+                        }
+                    }
+                }
+
+                // (c) Reactive Glow Pill Button:
+                if (ReactiveGlowShadow != null)
+                {
+                    double glowBtnCenterX = winW * 0.5;
+                    double glowBtnCenterY = winH * 0.77;
+                    double btnLightIllum = _beam.GetIlluminationAtPoint(glowBtnCenterX, glowBtnCenterY, reachRadius: 600.0);
+
+                    double targetGlowBlur = 12.0 + (btnLightIllum * 24.0);
+                    double targetGlowOpacity = _audioReactivityEnabled ? (0.22 + (btnLightIllum * 0.68)) : 0.0;
+
+                    if (_lastGlowShadowColor != currentLightColor)
+                    {
+                        _lastGlowShadowColor = currentLightColor;
+                        ReactiveGlowShadow.Color = currentLightColor;
+                    }
+                    if (Math.Abs(targetGlowBlur - _lastGlowShadowBlur) >= 1.5)
+                    {
+                        _lastGlowShadowBlur = targetGlowBlur;
+                        ReactiveGlowShadow.BlurRadius = targetGlowBlur;
+                    }
+                    if (Math.Abs(targetGlowOpacity - _lastGlowShadowOpacity) >= 0.02)
+                    {
+                        _lastGlowShadowOpacity = targetGlowOpacity;
+                        ReactiveGlowShadow.Opacity = targetGlowOpacity;
+                    }
+                }
+
+                // (d) Hero Play / Pause Button:
+                if (PlayPauseShadow != null)
+                {
+                    double playCenterX = winW * 0.5;
+                    double playCenterY = winH * 0.69;
+                    double playLightIllum = _beam.GetIlluminationAtPoint(playCenterX, playCenterY, reachRadius: 620.0);
+
+                    double targetPlayBlur = 14.0 + (playLightIllum * 20.0);
+                    double targetPlayOpacity = 0.20 + (playLightIllum * 0.55);
+
+                    if (_lastPlayShadowColor != currentLightColor)
+                    {
+                        _lastPlayShadowColor = currentLightColor;
+                        PlayPauseShadow.Color = currentLightColor;
+                    }
+                    if (Math.Abs(targetPlayBlur - _lastPlayShadowBlur) >= 1.5)
+                    {
+                        _lastPlayShadowBlur = targetPlayBlur;
+                        PlayPauseShadow.BlurRadius = targetPlayBlur;
+                    }
+                    if (Math.Abs(targetPlayOpacity - _lastPlayShadowOpacity) >= 0.02)
+                    {
+                        _lastPlayShadowOpacity = targetPlayOpacity;
+                        PlayPauseShadow.Opacity = targetPlayOpacity;
+                    }
+                }
+            }
+
+            // 3. TV AMBIENT FLOATING BACKDROP: Organic random sway motion via pure 2D vertex translation
             _backdropMotionTime += dt;
             if (_backdropMotionTime > 10000.0) _backdropMotionTime = 0.0;
 
@@ -488,17 +693,6 @@ namespace LmenV2.Views
             double swayY = Math.Cos(_backdropMotionTime * 0.31 + 0.8) * 28.0 
                          + Math.Sin(_backdropMotionTime * 0.14 + 2.2) * 14.0;
 
-            double swayAngle = Math.Sin(_backdropMotionTime * 0.22 + 0.5) * 0.75;
-
-            double baseScale = 1.20 
-                             + Math.Sin(_backdropMotionTime * 0.20 + 0.6) * 0.025;
-
-            double beatKickZoom = _beatExcitement * 0.015 * _settings.AudioReactivity;
-            double finalScale = baseScale + beatKickZoom;
-
-            BackdropScaleTransform.ScaleX = finalScale;
-            BackdropScaleTransform.ScaleY = finalScale;
-            BackdropRotateTransform.Angle = swayAngle;
             BackdropTranslateTransform.X = swayX;
             BackdropTranslateTransform.Y = swayY;
 
@@ -535,6 +729,73 @@ namespace LmenV2.Views
             Dispatcher.Invoke(() => UpdateColors(track));
         }
 
+        private void OnTimelineUpdated(TimeSpan position, TimeSpan duration)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (DateTime.UtcNow < _ignoreStaleTimelineUntil)
+                {
+                    if (Math.Abs((position - _currentTrackPosition).TotalSeconds) <= 2.5)
+                    {
+                        _currentTrackPosition = _lyricClock.Reconcile(_currentTrackPosition, position, _isPlaying);
+                        _currentTrackDuration = duration;
+                        _ignoreStaleTimelineUntil = DateTime.MinValue;
+                    }
+                }
+                else
+                {
+                    _currentTrackDuration = duration;
+                    _currentTrackPosition = _lyricClock.Reconcile(_currentTrackPosition, position, _isPlaying);
+                }
+
+                if (!_isUserSeeking)
+                {
+                    UpdatePlaybackTimeUI(_currentTrackPosition, _currentTrackDuration);
+                }
+            });
+        }
+
+        private void SetPlayPauseIconState(bool isPlaying)
+        {
+            string icon = isPlaying ? "\uE769" : "\uE768";
+            if (PlayPauseIcon != null) PlayPauseIcon.Text = icon;
+            if (MotionPlayPauseIcon != null) MotionPlayPauseIcon.Text = icon;
+        }
+
+        private void OnPlaybackStateChanged(bool isPlaying)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _isPlaying = isPlaying;
+                SetPlayPauseIconState(isPlaying);
+                if (_isMotionAvailable)
+                {
+                    if (isPlaying)
+                    {
+                        if (AlbumCoverVideo.Source != null && !_isFullscreenMotionActive)
+                        {
+                            AlbumCoverVideo.Play();
+                            if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null)
+                                TvMotionVideoBackdrop.Play();
+                        }
+                        if (FullscreenMotionVideo.Source != null && _isFullscreenMotionActive)
+                        {
+                            FullscreenMotionVideo.Play();
+                            if (MotionVideoBackdrop != null && MotionVideoBackdrop.Source != null)
+                                MotionVideoBackdrop.Play();
+                        }
+                    }
+                    else
+                    {
+                        AlbumCoverVideo?.Pause();
+                        TvMotionVideoBackdrop?.Pause();
+                        FullscreenMotionVideo?.Pause();
+                        MotionVideoBackdrop?.Pause();
+                    }
+                }
+            });
+        }
+
         private void UpdateColors(MediaTrackInfo? track)
         {
             if (track == null)
@@ -547,7 +808,7 @@ namespace LmenV2.Views
                 if (MotionArtistText != null) MotionArtistText.Text = "Play music to begin";
                 AlbumCoverImage.Source = null;
                 ResetMotionArtwork();
-                PlayPauseIcon.Text = "\uE768";
+                SetPlayPauseIconState(false);
                 _currentLyrics = null;
                 UpdateLyricsButtonAvailability(hasLyrics: false, isInstrumental: false);
                 return;
@@ -559,7 +820,22 @@ namespace LmenV2.Views
             if (LyricsArtistText != null) LyricsArtistText.Text = track.Artist;
             if (MotionSongTitleText != null) MotionSongTitleText.Text = track.Title;
             if (MotionArtistText != null) MotionArtistText.Text = track.Artist;
-            AlbumCoverImage.Source = track.Thumbnail;
+            if (AlbumCoverImage != null)
+            {
+                AlbumCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                AlbumCoverImage.Opacity = 1.0;
+                AlbumCoverImage.Source = track.Thumbnail;
+            }
+            if (_isFullscreenMotionActive)
+            {
+                if (FullscreenCoverImage != null)
+                {
+                    FullscreenCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                    FullscreenCoverImage.Opacity = 1.0;
+                    FullscreenCoverImage.Source = track.Thumbnail;
+                }
+                UpdateMotionBlurredBackdrop();
+            }
 
             // Detect if this is a new song (or initial load):
             string trackTitle = track.Title?.Trim() ?? string.Empty;
@@ -606,7 +882,7 @@ namespace LmenV2.Views
                 CrossFadeBackdrop(null);
             }
 
-            PlayPauseIcon.Text = track.IsPlaying ? "\uE769" : "\uE768";
+            SetPlayPauseIconState(track.IsPlaying);
 
             // Synchronize motion video playback state with music playback state
             if (_isMotionAvailable)
@@ -614,14 +890,24 @@ namespace LmenV2.Views
                 if (track.IsPlaying)
                 {
                     if (AlbumCoverVideo.Source != null && !_isFullscreenMotionActive)
+                    {
                         AlbumCoverVideo.Play();
+                        if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null)
+                            TvMotionVideoBackdrop.Play();
+                    }
                     if (FullscreenMotionVideo.Source != null && _isFullscreenMotionActive)
+                    {
                         FullscreenMotionVideo.Play();
+                        if (MotionVideoBackdrop != null && MotionVideoBackdrop.Source != null)
+                            MotionVideoBackdrop.Play();
+                    }
                 }
                 else
                 {
-                    AlbumCoverVideo.Pause();
-                    FullscreenMotionVideo.Pause();
+                    AlbumCoverVideo?.Pause();
+                    TvMotionVideoBackdrop?.Pause();
+                    FullscreenMotionVideo?.Pause();
+                    MotionVideoBackdrop?.Pause();
                 }
             }
 
@@ -711,10 +997,25 @@ namespace LmenV2.Views
                 {
                     _lastDisplayedPosSec = curSec;
                     _lastDisplayedDurSec = durSec;
-                    PositionText.Text = FormatTime(pos);
+                    string posStr = FormatTime(pos);
                     var remaining = dur - pos;
                     if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
-                    DurationText.Text = "-" + FormatTime(remaining);
+                    string remStr = "-" + FormatTime(remaining);
+
+                    PositionText.Text = posStr;
+                    DurationText.Text = remStr;
+
+                    if (MotionPositionText != null) MotionPositionText.Text = posStr;
+                    if (MotionDurationText != null) MotionDurationText.Text = remStr;
+                }
+
+                // Update Motion Artwork Floating Bar Scrubber
+                if (MotionTimelineTrackContainer != null && MotionProgressBarScale != null && MotionKnobTranslate != null)
+                {
+                    double motionWidth = MotionTimelineTrackContainer.ActualWidth > 0 ? MotionTimelineTrackContainer.ActualWidth : 360.0;
+                    double motionProgress = ratio * motionWidth;
+                    MotionProgressBarScale.ScaleX = Math.Max(0.001, motionProgress);
+                    MotionKnobTranslate.X = motionProgress - 5.0;
                 }
             }
             else
@@ -728,6 +1029,11 @@ namespace LmenV2.Views
                     PositionText.Text = "0:00";
                     DurationText.Text = "-0:00";
                 }
+
+                if (MotionProgressBarScale != null) MotionProgressBarScale.ScaleX = 0.001;
+                if (MotionKnobTranslate != null) MotionKnobTranslate.X = -5.0;
+                if (MotionPositionText != null) MotionPositionText.Text = "0:00";
+                if (MotionDurationText != null) MotionDurationText.Text = "-0:00";
             }
         }
 
@@ -743,6 +1049,8 @@ namespace LmenV2.Views
 
         private void CrossFadeBackdrop(BitmapSource? newBlurred)
         {
+            _currentBlurredBackdrop = newBlurred;
+
             var fadeDuration = TimeSpan.FromMilliseconds(750);
             var ease = new QuadraticEase { EasingMode = EasingMode.EaseInOut };
 
@@ -762,6 +1070,11 @@ namespace LmenV2.Views
                 BackdropImageA.BeginAnimation(UIElement.OpacityProperty, fadeInAnim);
                 BackdropImageB.BeginAnimation(UIElement.OpacityProperty, fadeOutAnim);
                 _activeBackdropIsA = true;
+            }
+
+            if (MotionBlurredBackdrop != null)
+            {
+                MotionBlurredBackdrop.Source = newBlurred;
             }
         }
 
@@ -804,7 +1117,7 @@ namespace LmenV2.Views
             {
                 _ = _mediaService.PauseAsync();
                 _isPlaying = false;
-                PlayPauseIcon.Text = "\uE768";
+                SetPlayPauseIconState(false);
             }
 
             TimelineTrackContainer.CaptureMouse();
@@ -876,7 +1189,7 @@ namespace LmenV2.Views
                 {
                     await _mediaService.PlayAsync();
                     _isPlaying = true;
-                    PlayPauseIcon.Text = "\uE769";
+                    SetPlayPauseIconState(true);
                 }
             }
         }
@@ -887,57 +1200,117 @@ namespace LmenV2.Views
 
         private void BrightnessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_suppressSettingsUpdate) return;
             if (BrightnessValText != null)
             {
-                _settings.GlowBrightness = e.NewValue / 100.0;
-                BrightnessValText.Text = $"{(int)e.NewValue}%";
+                _suppressSettingsUpdate = true;
+                try
+                {
+                    _settings.GlowBrightness = e.NewValue / 100.0;
+                    BrightnessValText.Text = $"{(int)e.NewValue}%";
+                }
+                finally
+                {
+                    _suppressSettingsUpdate = false;
+                }
             }
         }
 
         private void SpreadSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_suppressSettingsUpdate) return;
             if (SpreadValText != null)
             {
-                _settings.GlowSpread = e.NewValue;
-                SpreadValText.Text = $"{(int)e.NewValue} px";
-                ApplyGeometry();
+                _suppressSettingsUpdate = true;
+                try
+                {
+                    _settings.GlowSpread = e.NewValue;
+                    SpreadValText.Text = $"{(int)e.NewValue} px";
+                    ApplyGeometry();
+                }
+                finally
+                {
+                    _suppressSettingsUpdate = false;
+                }
             }
         }
 
         private void BackdropSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_suppressSettingsUpdate) return;
             if (BackdropValText != null && TvBackdropHost != null)
             {
-                double opacity = e.NewValue / 100.0;
-                _settings.BackdropBrightness = opacity;
-                TvBackdropHost.Opacity = opacity;
-                BackdropValText.Text = $"{(int)e.NewValue}%";
+                _suppressSettingsUpdate = true;
+                try
+                {
+                    double opacity = e.NewValue / 100.0;
+                    _settings.BackdropBrightness = opacity;
+                    TvBackdropHost.Opacity = opacity;
+                    if (MotionBlurredBackdrop != null) MotionBlurredBackdrop.Opacity = opacity;
+                    if (MotionVideoBackdrop != null && MotionVideoBackdrop.Source != null && MotionVideoBackdrop.Opacity > 0.01)
+                    {
+                        MotionVideoBackdrop.Opacity = opacity;
+                    }
+                    if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null && TvMotionVideoBackdrop.Opacity > 0.01)
+                    {
+                        TvMotionVideoBackdrop.Opacity = opacity;
+                    }
+                    BackdropValText.Text = $"{(int)e.NewValue}%";
+                }
+                finally
+                {
+                    _suppressSettingsUpdate = false;
+                }
             }
         }
 
         private void SpeedSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_suppressSettingsUpdate) return;
             if (SpeedValText != null)
             {
-                _settings.RotationSpeed = e.NewValue / 100.0;
-                SpeedValText.Text = $"{_settings.RotationSpeed:0.0}x";
+                _suppressSettingsUpdate = true;
+                try
+                {
+                    _settings.RotationSpeed = e.NewValue / 100.0;
+                    SpeedValText.Text = $"{_settings.RotationSpeed:0.0}x";
+                }
+                finally
+                {
+                    _suppressSettingsUpdate = false;
+                }
             }
         }
 
         private void ReactivitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_suppressSettingsUpdate) return;
             if (ReactivityValText != null)
             {
-                _settings.AudioReactivity = e.NewValue / 100.0;
-                ReactivityValText.Text = $"{_settings.AudioReactivity:0.0}x";
+                _suppressSettingsUpdate = true;
+                try
+                {
+                    _settings.AudioReactivity = e.NewValue / 100.0;
+                    ReactivityValText.Text = $"{_settings.AudioReactivity:0.0}x";
+                }
+                finally
+                {
+                    _suppressSettingsUpdate = false;
+                }
             }
         }
 
         private void ToggleGlowControls_Click(object sender, RoutedEventArgs e)
         {
-            QuickGlowControlsCard.Visibility = QuickGlowControlsCard.Visibility == Visibility.Visible
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            if (QuickGlowControlsCard.Visibility != Visibility.Visible)
+            {
+                InitSliderValues();
+                QuickGlowControlsCard.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                QuickGlowControlsCard.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void CloseQuickControls_Click(object sender, RoutedEventArgs e)
@@ -974,12 +1347,75 @@ namespace LmenV2.Views
         {
             _audioReactivityEnabled = !_audioReactivityEnabled;
             ReactiveGlowButton.Opacity = _audioReactivityEnabled ? 1.0 : 0.55;
-            ReactiveGlowText.Foreground = _audioReactivityEnabled 
-                ? System.Windows.Media.Brushes.White 
-                : new SolidColorBrush(Color.FromArgb(140, 255, 255, 255));
+            if (ReactiveGlowText != null)
+            {
+                ReactiveGlowText.Foreground = _audioReactivityEnabled 
+                    ? new SolidColorBrush(Color.FromArgb(160, 255, 255, 255))
+                    : new SolidColorBrush(Color.FromArgb(90, 255, 255, 255));
+            }
+            if (ReactiveGlowIcon != null)
+            {
+                ReactiveGlowIcon.Fill = _audioReactivityEnabled 
+                    ? System.Windows.Media.Brushes.White 
+                    : new SolidColorBrush(Color.FromArgb(140, 255, 255, 255));
+            }
+            if (ReactiveGlowShadow != null)
+            {
+                ReactiveGlowShadow.Opacity = _audioReactivityEnabled ? 0.45 : 0.0;
+            }
             ReactiveGlowButton.ToolTip = _audioReactivityEnabled 
                 ? "Reactive Glow: Active (Click to pause reactivity)" 
                 : "Reactive Glow: Paused (Click to enable reactivity)";
+        }
+
+        private void ReactiveGlowButton_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (ReactiveGlowText != null)
+            {
+                ReactiveGlowText.Margin = new Thickness(7, 0, 4, 0);
+                var widthAnim = new DoubleAnimation
+                {
+                    To = 86.0,
+                    Duration = TimeSpan.FromMilliseconds(200),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                };
+                var opacityAnim = new DoubleAnimation
+                {
+                    To = 1.0,
+                    Duration = TimeSpan.FromMilliseconds(200),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                };
+                ReactiveGlowText.BeginAnimation(WidthProperty, widthAnim);
+                ReactiveGlowText.BeginAnimation(OpacityProperty, opacityAnim);
+            }
+        }
+
+        private void ReactiveGlowButton_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (ReactiveGlowText != null)
+            {
+                var widthAnim = new DoubleAnimation
+                {
+                    To = 0.0,
+                    Duration = TimeSpan.FromMilliseconds(180),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                };
+                var opacityAnim = new DoubleAnimation
+                {
+                    To = 0.0,
+                    Duration = TimeSpan.FromMilliseconds(150),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                };
+                widthAnim.Completed += (s, ev) =>
+                {
+                    if (ReactiveGlowText != null && !ReactiveGlowButton.IsMouseOver)
+                    {
+                        ReactiveGlowText.Margin = new Thickness(0);
+                    }
+                };
+                ReactiveGlowText.BeginAnimation(WidthProperty, widthAnim);
+                ReactiveGlowText.BeginAnimation(OpacityProperty, opacityAnim);
+            }
         }
 
         private void GearButton_Click(object sender, RoutedEventArgs e)
@@ -997,6 +1433,7 @@ namespace LmenV2.Views
         {
             var settingsWin = new SettingsWindow();
             settingsWin.Owner = this;
+            settingsWin.Topmost = true;
             settingsWin.ShowDialog();
         }
 
@@ -1041,22 +1478,43 @@ namespace LmenV2.Views
 
         private void UpdateColorOverrideUI()
         {
-            if (ColorModeBadgeText == null || ColorModeBadge == null || ResetToAutoButton == null) return;
+            if (ColorModeBadgeText == null || ColorModeBadge == null) return;
 
             if (_customColorOverride.HasValue)
             {
                 Color c = _customColorOverride.Value;
-                ColorModeBadgeText.Text = $"Custom: #{c.R:X2}{c.G:X2}{c.B:X2}";
+                ColorModeBadgeText.Text = $"Custom (#{c.R:X2}{c.G:X2}{c.B:X2})";
                 ColorModeBadge.Background = new SolidColorBrush(Color.FromArgb(90, c.R, c.G, c.B));
                 ColorModeBadgeText.Foreground = System.Windows.Media.Brushes.White;
-                ResetToAutoButton.Visibility = Visibility.Visible;
+
+                // De-activate auto checkmark & glowing ring
+                if (ColorAutoCheckmark != null) ColorAutoCheckmark.Visibility = Visibility.Collapsed;
+                if (ColorAutoButton != null)
+                {
+                    ColorAutoButton.BorderBrush = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255));
+                    ColorAutoButton.BorderThickness = new Thickness(1);
+                    if (ColorAutoButton.Effect is DropShadowEffect autoEffect) autoEffect.Opacity = 0.0;
+                }
             }
             else
             {
                 ColorModeBadgeText.Text = "Auto (Album Art)";
-                ColorModeBadge.Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
-                ColorModeBadgeText.Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255));
-                ResetToAutoButton.Visibility = Visibility.Collapsed;
+                ColorModeBadge.Background = new SolidColorBrush(Color.FromArgb(37, 255, 255, 255));
+                ColorModeBadgeText.Foreground = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
+
+                // Activate auto checkmark & glowing ring (as shown in screenshot 2)
+                if (ColorAutoCheckmark != null) ColorAutoCheckmark.Visibility = Visibility.Visible;
+                if (ColorAutoButton != null)
+                {
+                    ColorAutoButton.BorderBrush = System.Windows.Media.Brushes.White;
+                    ColorAutoButton.BorderThickness = new Thickness(2);
+                    if (ColorAutoButton.Effect is DropShadowEffect autoEffect)
+                    {
+                        autoEffect.Color = Colors.White;
+                        autoEffect.BlurRadius = 8;
+                        autoEffect.Opacity = 0.85;
+                    }
+                }
             }
         }
 
@@ -1235,12 +1693,14 @@ namespace LmenV2.Views
                 RestoreTaskbarToTopmost();
                 SwitchToOverlay_Click(sender, e);
             }
+            else if (_isFullscreenMotionActive && (e.Key == Key.M || e.Key == Key.F))
+            {
+                ExitFullscreenMotionMode();
+                e.Handled = true;
+            }
             else if ((e.Key == Key.M || e.Key == Key.F) && !_isLyricsMode && _isMotionAvailable)
             {
-                if (_isFullscreenMotionActive)
-                    ExitFullscreenMotionMode();
-                else
-                    EnterFullscreenMotionMode();
+                EnterFullscreenMotionMode();
                 e.Handled = true;
             }
             else if (e.Key == Key.F11)
@@ -1350,10 +1810,18 @@ namespace LmenV2.Views
             // Is the cursor near the bottom edge of the screen (bottom 5px)?
             bool isAtBottomEdge = pt.Y >= (screenH - 5) && pt.X >= 0 && pt.X <= screenW;
 
-            IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
-            if (taskbarHwnd == IntPtr.Zero) return;
+            if (!isAtBottomEdge && !_isTaskbarRevealed)
+            {
+                return;
+            }
 
-            GetWindowRect(taskbarHwnd, out Win32Rect tbRect);
+            if (_cachedTaskbarHwnd == IntPtr.Zero)
+            {
+                _cachedTaskbarHwnd = FindWindow("Shell_TrayWnd", null);
+            }
+            if (_cachedTaskbarHwnd == IntPtr.Zero) return;
+
+            GetWindowRect(_cachedTaskbarHwnd, out Win32Rect tbRect);
 
             // True if mouse is anywhere over the taskbar bounds
             bool isCursorOverTaskbar = pt.X >= tbRect.Left && pt.X <= tbRect.Right && pt.Y >= tbRect.Top && pt.Y <= tbRect.Bottom;
@@ -1375,7 +1843,7 @@ namespace LmenV2.Views
                     IntPtr secTaskbar = FindWindow("Shell_SecondaryTrayWnd", null);
 
                     // If user is actively focused on taskbar or Start menu, keep it visible
-                    if (fg == _windowHandle || (fg != taskbarHwnd && fg != secTaskbar))
+                    if (fg == _windowHandle || (fg != _cachedTaskbarHwnd && fg != secTaskbar))
                     {
                         ResetTaskbarZOrder();
                     }
@@ -1892,14 +2360,22 @@ namespace LmenV2.Views
             _lyricsCts?.Cancel();
             _motionCts?.Cancel();
             _motionHintTimer?.Stop();
+            _albumVideoFrameTimer?.Stop();
+            _albumVideoFrameTimer = null;
+            _fullscreenVideoFrameTimer?.Stop();
+            _fullscreenVideoFrameTimer = null;
             try { AlbumCoverVideo?.Stop(); } catch { }
             try { FullscreenMotionVideo?.Stop(); } catch { }
             _userScrollResumeTimer?.Stop();
             _volumeCollapseTimer?.Stop();
             CompositionTarget.Rendering -= OnRenderFrame;
             _mediaService.TrackUpdated -= OnTrackUpdated;
+            _mediaService.TimelineUpdated -= OnTimelineUpdated;
+            _mediaService.PlaybackStateChanged -= OnPlaybackStateChanged;
             _settings.SettingsChanged -= OnSettingsChanged;
             _volumeService.VolumeChanged -= OnSystemVolumeChanged;
+            MotionArtworkService.Instance.VideoCached -= OnMotionVideoCached;
+            IsVisibleChanged -= FullscreenVisualizerWindow_IsVisibleChanged;
             base.OnClosed(e);
         }
 
@@ -2379,20 +2855,23 @@ namespace LmenV2.Views
                 }
 
                 var item = _allFisheyeWords[wordIdx];
-                node.BoundWord = item;
-                node.Container.Visibility = Visibility.Visible;
-                node.WordTextBlock.Text = item.Text;
+                if (!ReferenceEquals(node.BoundWord, item))
+                {
+                    node.BoundWord = item;
+                    node.WordTextBlock.Text = item.Text;
 
-                // Emoji / Symbol Badge beside word (Verci signature)
-                if (!string.IsNullOrEmpty(item.Symbol))
-                {
-                    node.SymbolTextBlock.Text = item.Symbol;
-                    node.SymbolBadge.Visibility = Visibility.Visible;
+                    // Emoji / Symbol Badge beside word (Verci signature)
+                    if (!string.IsNullOrEmpty(item.Symbol))
+                    {
+                        node.SymbolTextBlock.Text = item.Symbol;
+                        node.SymbolBadge.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        node.SymbolBadge.Visibility = Visibility.Collapsed;
+                    }
                 }
-                else
-                {
-                    node.SymbolBadge.Visibility = Visibility.Collapsed;
-                }
+                node.Container.Visibility = Visibility.Visible;
 
                 // Distance from exact smoothed focal point
                 double d = wordIdx - _smoothedFisheyeIndex;
@@ -3889,17 +4368,20 @@ namespace LmenV2.Views
 
         private async Task LoadMotionArtworkForCurrentSongAsync(string title, string artist, string? albumTitle)
         {
-            _motionCts?.Cancel();
+            ResetMotionArtwork();
+
+            if (string.IsNullOrWhiteSpace(title) ||
+                title.Equals("Ready to Play", StringComparison.OrdinalIgnoreCase) ||
+                title.Equals("Unknown Track", StringComparison.OrdinalIgnoreCase) ||
+                title.Equals("No Track Playing", StringComparison.OrdinalIgnoreCase))
+                return;
+
             _motionCts = new System.Threading.CancellationTokenSource();
             var ct = _motionCts.Token;
 
-            ResetMotionArtwork();
-
-            if (string.IsNullOrWhiteSpace(title) || title == "Ready to Play" || title == "Unknown Track")
-                return;
-
             try
             {
+                App.Log($"[MotionArtwork] Searching motion canvas for: '{title}' - '{artist}'");
                 var motion = await MotionArtworkService.Instance.GetMotionArtworkAsync(title, artist, albumTitle ?? "", ct);
                 if (ct.IsCancellationRequested || motion == null || string.IsNullOrWhiteSpace(motion.Url))
                 {
@@ -3915,7 +4397,9 @@ namespace LmenV2.Views
                     ? motion.LocalFilePath
                     : motion.Url;
 
-                var uri = new Uri(targetUri, UriKind.RelativeOrAbsolute);
+                var uri = targetUri.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(targetUri, UriKind.Absolute)
+                    : new Uri(System.IO.Path.GetFullPath(targetUri), UriKind.Absolute);
 
                 await Dispatcher.InvokeAsync(() =>
                 {
@@ -3923,16 +4407,35 @@ namespace LmenV2.Views
 
                     App.Log($"[MotionArtwork] Mounting motion video for '{title}': {targetUri} (Source: {motion.Source})");
 
-                    if (AlbumCoverVideo != null)
+                    if (_isFullscreenMotionActive)
                     {
-                        AlbumCoverVideo.Source = uri;
-                        AlbumCoverVideo.Play();
+                        if (FullscreenMotionVideo != null)
+                        {
+                            FullscreenMotionVideo.Source = uri;
+                            FullscreenMotionVideo.Stop();
+                            if (_isPlaying) FullscreenMotionVideo.Play();
+                        }
+                        if (MotionVideoBackdrop != null)
+                        {
+                            MotionVideoBackdrop.Source = uri;
+                            MotionVideoBackdrop.Stop();
+                            if (_isPlaying) MotionVideoBackdrop.Play();
+                        }
                     }
-
-                    if (_isFullscreenMotionActive && FullscreenMotionVideo != null)
+                    else
                     {
-                        FullscreenMotionVideo.Source = uri;
-                        FullscreenMotionVideo.Play();
+                        if (AlbumCoverVideo != null)
+                        {
+                            AlbumCoverVideo.Source = uri;
+                            AlbumCoverVideo.Stop();
+                            if (_isPlaying) AlbumCoverVideo.Play();
+                        }
+                        if (TvMotionVideoBackdrop != null)
+                        {
+                            TvMotionVideoBackdrop.Source = uri;
+                            TvMotionVideoBackdrop.Stop();
+                            if (_isPlaying) TvMotionVideoBackdrop.Play();
+                        }
                     }
 
                     UpdateMotionButtonUI();
@@ -3945,9 +4448,65 @@ namespace LmenV2.Views
             }
         }
 
+        private void OnMotionVideoCached(string videoUrl, string localFilePath)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (_currentMotionResult != null && _currentMotionResult.Url == videoUrl)
+                {
+                    _currentMotionResult.LocalFilePath = localFilePath;
+                    var newUri = new Uri(System.IO.Path.GetFullPath(localFilePath), UriKind.Absolute);
+
+                    // Seamlessly transition running video to local zero-latency file
+                    if (_isFullscreenMotionActive)
+                    {
+                        if (FullscreenMotionVideo != null && FullscreenMotionVideo.Source != null && FullscreenMotionVideo.Source.OriginalString != localFilePath)
+                        {
+                            FullscreenMotionVideo.Source = newUri;
+                            FullscreenMotionVideo.Stop();
+                            if (_isPlaying) FullscreenMotionVideo.Play();
+                        }
+                        if (MotionVideoBackdrop != null && MotionVideoBackdrop.Source != null && MotionVideoBackdrop.Source.OriginalString != localFilePath)
+                        {
+                            MotionVideoBackdrop.Source = newUri;
+                            MotionVideoBackdrop.Stop();
+                            if (_isPlaying) MotionVideoBackdrop.Play();
+                        }
+                    }
+                    else
+                    {
+                        if (AlbumCoverVideo != null && AlbumCoverVideo.Source != null && AlbumCoverVideo.Source.OriginalString != localFilePath)
+                        {
+                            AlbumCoverVideo.Source = newUri;
+                            AlbumCoverVideo.Stop();
+                            if (_isPlaying) AlbumCoverVideo.Play();
+                        }
+                        if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null && TvMotionVideoBackdrop.Source.OriginalString != localFilePath)
+                        {
+                            TvMotionVideoBackdrop.Source = newUri;
+                            TvMotionVideoBackdrop.Stop();
+                            if (_isPlaying) TvMotionVideoBackdrop.Play();
+                        }
+                    }
+                }
+            });
+        }
+
         private void ResetMotionArtwork()
         {
-            _motionCts?.Cancel();
+            try
+            {
+                _motionCts?.Cancel();
+                _motionCts?.Dispose();
+            }
+            catch { }
+            _motionCts = null;
+
+            _albumVideoFrameTimer?.Stop();
+            _albumVideoFrameTimer = null;
+            _fullscreenVideoFrameTimer?.Stop();
+            _fullscreenVideoFrameTimer = null;
+
             _isMotionAvailable = false;
             _currentMotionResult = null;
             _hasAttemptedFallback = false;
@@ -3956,7 +4515,20 @@ namespace LmenV2.Views
             {
                 AlbumCoverVideo.Stop();
                 AlbumCoverVideo.Source = null;
-                AlbumCoverVideo.Opacity = 0;
+            }
+
+            if (TvMotionVideoBackdrop != null)
+            {
+                TvMotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, null);
+                TvMotionVideoBackdrop.Opacity = 0.0;
+                TvMotionVideoBackdrop.Stop();
+                TvMotionVideoBackdrop.Source = null;
+            }
+
+            if (AlbumCoverImage != null)
+            {
+                AlbumCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                AlbumCoverImage.Opacity = 1.0;
             }
 
             if (MotionBadge != null)
@@ -3968,12 +4540,20 @@ namespace LmenV2.Views
             {
                 FullscreenMotionVideo.Stop();
                 FullscreenMotionVideo.Source = null;
-                FullscreenMotionVideo.Opacity = 0;
             }
 
-            if (_isFullscreenMotionActive)
+            if (MotionVideoBackdrop != null)
             {
-                ExitFullscreenMotionMode();
+                MotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, null);
+                MotionVideoBackdrop.Opacity = 0.0;
+                MotionVideoBackdrop.Stop();
+                MotionVideoBackdrop.Source = null;
+            }
+
+            if (FullscreenCoverImage != null)
+            {
+                FullscreenCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                FullscreenCoverImage.Opacity = 1.0;
             }
 
             UpdateMotionButtonUI();
@@ -4015,49 +4595,95 @@ namespace LmenV2.Views
             }
         }
 
+        private void UpdateMotionBlurredBackdrop()
+        {
+            if (MotionBlurredBackdrop == null) return;
+
+            if (_currentBlurredBackdrop != null)
+            {
+                MotionBlurredBackdrop.Source = _currentBlurredBackdrop;
+                return;
+            }
+
+            // Otherwise generate from current track thumbnail or album cover image
+            var thumb = AlbumCoverImage?.Source as BitmapSource ?? _mediaService.CurrentTrack?.Thumbnail;
+            if (thumb != null)
+            {
+                _currentBlurredBackdrop = BackdropBlur.CreateBlurredBackdrop(thumb);
+                MotionBlurredBackdrop.Source = _currentBlurredBackdrop ?? thumb;
+            }
+            else
+            {
+                MotionBlurredBackdrop.Source = null;
+            }
+        }
+
         private void EnterFullscreenMotionMode()
         {
             _isFullscreenMotionActive = true;
 
-            VisualizerContentGrid.Visibility = Visibility.Collapsed;
-            FullscreenLyricsStage.Visibility = Visibility.Collapsed;
-            FullscreenMotionStage.Visibility = Visibility.Visible;
+            // Immediately set the fullscreen static cover image & blurred backdrop BEFORE stage is made visible
+            if (FullscreenCoverImage != null)
+            {
+                FullscreenCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                FullscreenCoverImage.Source = AlbumCoverImage?.Source ?? _mediaService.CurrentTrack?.Thumbnail ?? _lastBackdropSource;
+                FullscreenCoverImage.Opacity = 1.0;
+            }
+
+            UpdateMotionBlurredBackdrop();
 
             if (MotionSongTitleText != null) MotionSongTitleText.Text = TrackTitleText.Text;
             if (MotionArtistText != null) MotionArtistText.Text = ArtistNameText.Text;
 
-            // Immediately set the fullscreen static cover image as base
-            if (FullscreenCoverImage != null)
-            {
-                FullscreenCoverImage.Source = AlbumCoverImage.Source;
-            }
+            FullscreenMotionStage.Visibility = Visibility.Visible;
+            VisualizerContentGrid.Visibility = Visibility.Collapsed;
+            FullscreenLyricsStage.Visibility = Visibility.Collapsed;
 
-            // If motion artwork video is available or loading, mount it to the fullscreen element
-            if (AlbumCoverVideo != null && AlbumCoverVideo.Source != null)
-            {
-                if (FullscreenMotionVideo != null)
-                {
-                    FullscreenMotionVideo.Source = AlbumCoverVideo.Source;
-                    FullscreenMotionVideo.Position = AlbumCoverVideo.Position;
-                    if (_isMotionAvailable)
-                    {
-                        FullscreenMotionVideo.Opacity = 1.0;
-                    }
-                    if (_isPlaying) FullscreenMotionVideo.Play();
-                }
-                AlbumCoverVideo.Pause();
-            }
-            else if (_currentMotionResult != null)
+            // Resolve URI for motion artwork
+            Uri? uriToPlay = null;
+            if (_currentMotionResult != null)
             {
                 string targetUri = !string.IsNullOrEmpty(_currentMotionResult.LocalFilePath) && System.IO.File.Exists(_currentMotionResult.LocalFilePath)
                     ? _currentMotionResult.LocalFilePath
                     : _currentMotionResult.Url;
 
-                var uri = new Uri(targetUri, UriKind.RelativeOrAbsolute);
+                uriToPlay = targetUri.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(targetUri, UriKind.Absolute)
+                    : new Uri(System.IO.Path.GetFullPath(targetUri), UriKind.Absolute);
+            }
+            else if (AlbumCoverVideo?.Source != null)
+            {
+                uriToPlay = AlbumCoverVideo.Source;
+            }
+
+            // Stop small video and release D3D surface so fullscreen video has full hardware decoder
+            if (AlbumCoverVideo != null)
+            {
+                _albumVideoFrameTimer?.Stop();
+                _albumVideoFrameTimer = null;
+                AlbumCoverVideo.Stop();
+                AlbumCoverVideo.Source = null;
+            }
+            if (TvMotionVideoBackdrop != null)
+            {
+                TvMotionVideoBackdrop.Stop();
+                TvMotionVideoBackdrop.Source = null;
+                TvMotionVideoBackdrop.Opacity = 0.0;
+            }
+
+            if (uriToPlay != null)
+            {
                 if (FullscreenMotionVideo != null)
                 {
-                    FullscreenMotionVideo.Source = uri;
+                    FullscreenMotionVideo.Source = uriToPlay;
+                    FullscreenMotionVideo.Stop();
                     if (_isPlaying) FullscreenMotionVideo.Play();
+                }
+                if (MotionVideoBackdrop != null)
+                {
+                    MotionVideoBackdrop.Source = uriToPlay;
+                    MotionVideoBackdrop.Stop();
+                    if (_isPlaying) MotionVideoBackdrop.Play();
                 }
             }
 
@@ -4080,6 +4706,17 @@ namespace LmenV2.Views
                 };
                 _motionHintTimer.Start();
             }
+
+            // Initialize and show Motion Player Bar
+            if (MotionPlayerBar != null)
+            {
+                MotionPlayerBar.BeginAnimation(UIElement.OpacityProperty, null);
+                MotionPlayerBar.Opacity = 1.0;
+                MotionPlayerBar.Visibility = Visibility.Visible;
+                SetPlayPauseIconState(_isPlaying);
+                UpdatePlaybackTimeUI(_currentTrackPosition, _currentTrackDuration);
+                ResetMotionBarFadeTimer();
+            }
         }
 
         private void ExitFullscreenMotionMode()
@@ -4088,30 +4725,101 @@ namespace LmenV2.Views
 
             _isFullscreenMotionActive = false;
             _motionHintTimer?.Stop();
+            _fullscreenVideoFrameTimer?.Stop();
+            _fullscreenVideoFrameTimer = null;
+            _motionBarFadeTimer?.Stop();
 
-            if (AlbumCoverVideo != null && _isMotionAvailable && _isPlaying)
+            if (MotionPlayerBar != null)
             {
-                if (FullscreenMotionVideo != null && FullscreenMotionVideo.Source != null)
-                {
-                    AlbumCoverVideo.Position = FullscreenMotionVideo.Position;
-                }
-                AlbumCoverVideo.Play();
+                MotionPlayerBar.BeginAnimation(UIElement.OpacityProperty, null);
             }
 
+            // Stop fullscreen video and release D3D hardware decoder
             if (FullscreenMotionVideo != null)
             {
                 FullscreenMotionVideo.Stop();
                 FullscreenMotionVideo.Source = null;
-                FullscreenMotionVideo.Opacity = 0;
+            }
+
+            if (MotionVideoBackdrop != null)
+            {
+                MotionVideoBackdrop.Stop();
+                MotionVideoBackdrop.Source = null;
+                MotionVideoBackdrop.Opacity = 0.0;
             }
 
             if (FullscreenCoverImage != null)
             {
+                FullscreenCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
                 FullscreenCoverImage.Source = null;
+                FullscreenCoverImage.Opacity = 1.0;
+            }
+
+            // Ensure small video starts hidden behind 100% opaque cover image
+            if (AlbumCoverImage != null)
+            {
+                AlbumCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                AlbumCoverImage.Opacity = 1.0;
             }
 
             FullscreenMotionStage.Visibility = Visibility.Collapsed;
             VisualizerContentGrid.Visibility = Visibility.Visible;
+
+            // Re-mount to small album cover video if motion artwork is available
+            if (_isMotionAvailable && _currentMotionResult != null)
+            {
+                string targetUri = !string.IsNullOrEmpty(_currentMotionResult.LocalFilePath) && System.IO.File.Exists(_currentMotionResult.LocalFilePath)
+                    ? _currentMotionResult.LocalFilePath
+                    : _currentMotionResult.Url;
+
+                var uri = targetUri.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(targetUri, UriKind.Absolute)
+                    : new Uri(System.IO.Path.GetFullPath(targetUri), UriKind.Absolute);
+
+                if (AlbumCoverVideo != null)
+                {
+                    AlbumCoverVideo.Source = uri;
+                    AlbumCoverVideo.Stop();
+                    if (_isPlaying) AlbumCoverVideo.Play();
+                }
+                if (TvMotionVideoBackdrop != null)
+                {
+                    TvMotionVideoBackdrop.Source = uri;
+                    TvMotionVideoBackdrop.Stop();
+                    if (_isPlaying) TvMotionVideoBackdrop.Play();
+                }
+            }
+        }
+
+        private void FullscreenVisualizerWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (IsVisible)
+            {
+                if (_isMotionAvailable && _isPlaying)
+                {
+                    if (_isFullscreenMotionActive)
+                    {
+                        if (FullscreenMotionVideo != null && FullscreenMotionVideo.Source != null)
+                            FullscreenMotionVideo.Play();
+                        if (MotionVideoBackdrop != null && MotionVideoBackdrop.Source != null)
+                            MotionVideoBackdrop.Play();
+                    }
+                    else
+                    {
+                        if (AlbumCoverVideo != null && AlbumCoverVideo.Source != null)
+                            AlbumCoverVideo.Play();
+                        if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null)
+                            TvMotionVideoBackdrop.Play();
+                    }
+                }
+            }
+            else
+            {
+                AlbumCoverVideo?.Pause();
+                TvMotionVideoBackdrop?.Pause();
+                FullscreenMotionVideo?.Pause();
+                MotionVideoBackdrop?.Pause();
+            }
         }
 
         private void AlbumArtContainer_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -4140,6 +4848,10 @@ namespace LmenV2.Views
 
         private void FullscreenMotionStage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (MotionPlayerBar != null && (e.Source == MotionPlayerBar || MotionPlayerBar.IsAncestorOf(e.OriginalSource as DependencyObject)))
+            {
+                return;
+            }
             if (e.ClickCount == 2)
             {
                 e.Handled = true;
@@ -4149,11 +4861,205 @@ namespace LmenV2.Views
 
         private void FullscreenMotionStage_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (MotionPlayerBar != null && (e.Source == MotionPlayerBar || MotionPlayerBar.IsAncestorOf(e.OriginalSource as DependencyObject)))
+            {
+                return;
+            }
             if (e.ClickCount == 2)
             {
                 e.Handled = true;
                 ExitFullscreenMotionMode();
             }
+        }
+
+        private void FullscreenMotionStage_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (!_isFullscreenMotionActive) return;
+            ShowMotionControls();
+        }
+
+        private void ShowMotionControls()
+        {
+            if (MotionPlayerBar == null) return;
+
+            if (MotionPlayerBar.Visibility != Visibility.Visible || MotionPlayerBar.Opacity < 0.99)
+            {
+                MotionPlayerBar.Visibility = Visibility.Visible;
+                var anim = new DoubleAnimation
+                {
+                    To = 1.0,
+                    Duration = TimeSpan.FromMilliseconds(220),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                MotionPlayerBar.BeginAnimation(UIElement.OpacityProperty, anim);
+            }
+
+            ResetMotionBarFadeTimer();
+        }
+
+        private void ResetMotionBarFadeTimer()
+        {
+            if (!_isFullscreenMotionActive) return;
+
+            _motionBarFadeTimer?.Stop();
+            _motionBarFadeTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(3.5)
+            };
+            _motionBarFadeTimer.Tick += (s, e) =>
+            {
+                _motionBarFadeTimer?.Stop();
+                if (!_isFullscreenMotionActive) return;
+
+                // If user is currently dragging/seeking or hovering directly over the bar, don't fade out!
+                if (_isUserSeeking || (MotionPlayerBar != null && MotionPlayerBar.IsMouseOver))
+                {
+                    ResetMotionBarFadeTimer();
+                    return;
+                }
+
+                if (MotionPlayerBar != null)
+                {
+                    var fadeOut = new DoubleAnimation
+                    {
+                        To = 0.0,
+                        Duration = TimeSpan.FromMilliseconds(550),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+                    };
+                    MotionPlayerBar.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+                }
+            };
+            _motionBarFadeTimer.Start();
+        }
+
+        private void MotionPlayerBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            ResetMotionBarFadeTimer();
+        }
+
+        private void MotionPlayerBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            ResetMotionBarFadeTimer();
+            if (e.ClickCount == 2)
+            {
+                e.Handled = true;
+            }
+        }
+
+        private void MotionTimeline_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_currentTrackDuration <= TimeSpan.Zero) return;
+            ResetMotionBarFadeTimer();
+
+            _isUserSeeking = true;
+            _wasPlayingBeforeSeek = _isPlaying;
+            int seq = System.Threading.Interlocked.Increment(ref _seekSequence);
+
+            if (_wasPlayingBeforeSeek)
+            {
+                _ = _mediaService.PauseAsync();
+                _isPlaying = false;
+                SetPlayPauseIconState(false);
+            }
+
+            MotionTimelineTrackContainer.CaptureMouse();
+
+            double totalWidth = MotionTimelineTrackContainer.ActualWidth > 0 ? MotionTimelineTrackContainer.ActualWidth : 360.0;
+            double mouseX = Math.Clamp(e.GetPosition(MotionTimelineTrackContainer).X, 0, totalWidth);
+            double ratio = mouseX / totalWidth;
+
+            _seekTargetTime = TimeSpan.FromSeconds(ratio * _currentTrackDuration.TotalSeconds);
+            _currentTrackPosition = _seekTargetTime;
+
+            MotionProgressBarScale.ScaleX = Math.Max(0.001, mouseX);
+            MotionKnobTranslate.X = mouseX - 5.0;
+
+            double mainWidth = TimelineTrackContainer.ActualWidth > 0 ? TimelineTrackContainer.ActualWidth : 450.0;
+            double mainProgress = ratio * mainWidth;
+            ProgressBarScale.ScaleX = Math.Max(0.001, mainProgress);
+            KnobTranslate.X = mainProgress - 5.0;
+
+            _lastDisplayedPosSec = (int)_seekTargetTime.TotalSeconds;
+            string posStr = FormatTime(_seekTargetTime);
+            var remaining = _currentTrackDuration - _seekTargetTime;
+            string remStr = "-" + FormatTime(remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining);
+
+            PositionText.Text = posStr;
+            DurationText.Text = remStr;
+            if (MotionPositionText != null) MotionPositionText.Text = posStr;
+            if (MotionDurationText != null) MotionDurationText.Text = remStr;
+
+            e.Handled = true;
+        }
+
+        private void MotionTimeline_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            ResetMotionBarFadeTimer();
+            if (!_isUserSeeking || _currentTrackDuration <= TimeSpan.Zero) return;
+
+            double totalWidth = MotionTimelineTrackContainer.ActualWidth > 0 ? MotionTimelineTrackContainer.ActualWidth : 360.0;
+            double mouseX = Math.Clamp(e.GetPosition(MotionTimelineTrackContainer).X, 0, totalWidth);
+            double ratio = mouseX / totalWidth;
+
+            _seekTargetTime = TimeSpan.FromSeconds(ratio * _currentTrackDuration.TotalSeconds);
+            _currentTrackPosition = _seekTargetTime;
+
+            MotionProgressBarScale.ScaleX = Math.Max(0.001, mouseX);
+            MotionKnobTranslate.X = mouseX - 5.0;
+
+            double mainWidth = TimelineTrackContainer.ActualWidth > 0 ? TimelineTrackContainer.ActualWidth : 450.0;
+            double mainProgress = ratio * mainWidth;
+            ProgressBarScale.ScaleX = Math.Max(0.001, mainProgress);
+            KnobTranslate.X = mainProgress - 5.0;
+
+            _lastDisplayedPosSec = (int)_seekTargetTime.TotalSeconds;
+            string posStr = FormatTime(_seekTargetTime);
+            var remaining = _currentTrackDuration - _seekTargetTime;
+            string remStr = "-" + FormatTime(remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining);
+
+            PositionText.Text = posStr;
+            DurationText.Text = remStr;
+            if (MotionPositionText != null) MotionPositionText.Text = posStr;
+            if (MotionDurationText != null) MotionDurationText.Text = remStr;
+
+            e.Handled = true;
+        }
+
+        private async void MotionTimeline_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isUserSeeking) return;
+            ResetMotionBarFadeTimer();
+
+            _isUserSeeking = false;
+            MotionTimelineTrackContainer.ReleaseMouseCapture();
+
+            if (_currentTrackDuration > TimeSpan.Zero)
+            {
+                int seq = _seekSequence;
+
+                double totalWidth = MotionTimelineTrackContainer.ActualWidth > 0 ? MotionTimelineTrackContainer.ActualWidth : 360.0;
+                double mouseX = Math.Clamp(e.GetPosition(MotionTimelineTrackContainer).X, 0, totalWidth);
+                double ratio = mouseX / totalWidth;
+
+                _seekTargetTime = TimeSpan.FromSeconds(ratio * _currentTrackDuration.TotalSeconds);
+                _currentTrackPosition = _seekTargetTime;
+                _lyricClock.Reset(_seekTargetTime, _isPlaying);
+
+                _ignoreStaleTimelineUntil = DateTime.UtcNow.AddSeconds(3.0);
+
+                await _mediaService.ChangePlaybackPositionAsync(_seekTargetTime);
+                await System.Threading.Tasks.Task.Delay(800);
+
+                if (seq == _seekSequence && _wasPlayingBeforeSeek)
+                {
+                    await _mediaService.PlayAsync();
+                    _isPlaying = true;
+                    SetPlayPauseIconState(true);
+                }
+            }
+
+            e.Handled = true;
         }
 
         private void ExitMotion_Click(object sender, RoutedEventArgs e)
@@ -4168,69 +5074,226 @@ namespace LmenV2.Views
             if (MotionBadge != null) MotionBadge.Visibility = Visibility.Visible;
             UpdateMotionButtonUI();
 
-            var fade = new System.Windows.Media.Animation.DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(350))
+            AlbumCoverVideo.Play();
+            if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null)
             {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
-            AlbumCoverVideo.BeginAnimation(UIElement.OpacityProperty, fade);
-
-            // If user has already entered fullscreen motion mode, link source and start playing immediately
-            if (_isFullscreenMotionActive && FullscreenMotionVideo != null)
-            {
-                if (FullscreenMotionVideo.Source == null || !Equals(FullscreenMotionVideo.Source, AlbumCoverVideo.Source))
-                {
-                    FullscreenMotionVideo.Source = AlbumCoverVideo.Source;
-                    FullscreenMotionVideo.Position = AlbumCoverVideo.Position;
-                }
-                FullscreenMotionVideo.Opacity = 1.0;
-                if (_isPlaying) FullscreenMotionVideo.Play();
+                TvMotionVideoBackdrop.Play();
             }
+
+            _albumVideoFrameTimer?.Stop();
+            int ticks = 0;
+            _albumVideoFrameTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(20)
+            };
+            _albumVideoFrameTimer.Tick += (s, ev) =>
+            {
+                ticks++;
+                bool frameReady = AlbumCoverVideo.Position > TimeSpan.FromMilliseconds(25);
+                // When frame is verified rendered, fade out the top static cover image to reveal video underneath
+                if (frameReady || ticks >= 50)
+                {
+                    _albumVideoFrameTimer?.Stop();
+                    _albumVideoFrameTimer = null;
+
+                    if (AlbumCoverImage != null)
+                    {
+                        var fade = new System.Windows.Media.Animation.DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(350))
+                        {
+                            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                        };
+                        AlbumCoverImage.BeginAnimation(UIElement.OpacityProperty, fade);
+                    }
+
+                    if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null)
+                    {
+                        var videoFade = new System.Windows.Media.Animation.DoubleAnimation(0.0, _settings.BackdropBrightness, TimeSpan.FromMilliseconds(450))
+                        {
+                            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                        };
+                        TvMotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, videoFade);
+                    }
+
+                    if (!_isPlaying)
+                    {
+                        AlbumCoverVideo.Pause();
+                        TvMotionVideoBackdrop?.Pause();
+                    }
+                }
+            };
+            _albumVideoFrameTimer.Start();
         }
 
         private void AlbumCoverVideo_MediaEnded(object sender, RoutedEventArgs e)
         {
+            // Reset position to zero and continue playback without tearing down the DirectShow graph
             AlbumCoverVideo.Position = TimeSpan.Zero;
             AlbumCoverVideo.Play();
         }
 
+        private void TvMotionVideoBackdrop_MediaEnded(object sender, RoutedEventArgs e)
+        {
+            if (TvMotionVideoBackdrop != null)
+            {
+                TvMotionVideoBackdrop.Position = TimeSpan.Zero;
+                TvMotionVideoBackdrop.Play();
+            }
+        }
+
         private void AlbumCoverVideo_MediaFailed(object sender, ExceptionRoutedEventArgs e)
         {
+            _albumVideoFrameTimer?.Stop();
+            _albumVideoFrameTimer = null;
+
+            if (TvMotionVideoBackdrop != null)
+            {
+                TvMotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, null);
+                TvMotionVideoBackdrop.Opacity = 0.0;
+                TvMotionVideoBackdrop.Stop();
+                TvMotionVideoBackdrop.Source = null;
+            }
+
             App.Log($"[MotionArtwork] AlbumCoverVideo MediaFailed: {e.ErrorException?.Message}");
             if (_currentMotionResult?.FallbackUrl != null && !_hasAttemptedFallback)
             {
                 _hasAttemptedFallback = true;
                 App.Log($"[MotionArtwork] Retrying with FallbackUrl: {_currentMotionResult.FallbackUrl}");
-                AlbumCoverVideo.Source = new Uri(_currentMotionResult.FallbackUrl, UriKind.RelativeOrAbsolute);
+                var uri = _currentMotionResult.FallbackUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(_currentMotionResult.FallbackUrl, UriKind.Absolute)
+                    : new Uri(System.IO.Path.GetFullPath(_currentMotionResult.FallbackUrl), UriKind.Absolute);
+                AlbumCoverVideo.Source = uri;
+                AlbumCoverVideo.Stop();
                 AlbumCoverVideo.Play();
+                if (TvMotionVideoBackdrop != null)
+                {
+                    TvMotionVideoBackdrop.Source = uri;
+                    TvMotionVideoBackdrop.Stop();
+                    TvMotionVideoBackdrop.Play();
+                }
                 return;
             }
 
             _isMotionAvailable = false;
-            AlbumCoverVideo.Opacity = 0;
+            if (AlbumCoverImage != null)
+            {
+                AlbumCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                AlbumCoverImage.Opacity = 1.0;
+            }
             if (MotionBadge != null) MotionBadge.Visibility = Visibility.Collapsed;
             UpdateMotionButtonUI();
         }
 
         private void FullscreenMotionVideo_MediaOpened(object sender, RoutedEventArgs e)
         {
-            if (_isPlaying) FullscreenMotionVideo.Play();
+            _isMotionAvailable = true;
+            App.Log("[MotionArtwork] FullscreenMotionVideo MediaOpened successfully!");
 
-            var fade = new System.Windows.Media.Animation.DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(350))
+            // Always start play to decode initial frames
+            FullscreenMotionVideo.Play();
+            if (MotionVideoBackdrop != null && MotionVideoBackdrop.Source != null)
             {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                MotionVideoBackdrop.Play();
+            }
+
+            _fullscreenVideoFrameTimer?.Stop();
+            int ticks = 0;
+            _fullscreenVideoFrameTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(20)
             };
-            FullscreenMotionVideo.BeginAnimation(UIElement.OpacityProperty, fade);
+            _fullscreenVideoFrameTimer.Tick += (s, ev) =>
+            {
+                ticks++;
+                bool frameReady = FullscreenMotionVideo.Position > TimeSpan.FromMilliseconds(25);
+                // When frame is verified rendered, fade out the top static cover image to reveal video underneath
+                if (frameReady || ticks >= 50)
+                {
+                    _fullscreenVideoFrameTimer?.Stop();
+                    _fullscreenVideoFrameTimer = null;
+
+                    if (FullscreenCoverImage != null)
+                    {
+                        var fade = new System.Windows.Media.Animation.DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(350))
+                        {
+                            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                        };
+                        FullscreenCoverImage.BeginAnimation(UIElement.OpacityProperty, fade);
+                    }
+
+                    if (MotionVideoBackdrop != null && MotionVideoBackdrop.Source != null)
+                    {
+                        var videoFade = new System.Windows.Media.Animation.DoubleAnimation(0.0, _settings.BackdropBrightness, TimeSpan.FromMilliseconds(450))
+                        {
+                            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                        };
+                        MotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, videoFade);
+                    }
+
+                    if (!_isPlaying)
+                    {
+                        FullscreenMotionVideo.Pause();
+                        MotionVideoBackdrop?.Pause();
+                    }
+                }
+            };
+            _fullscreenVideoFrameTimer.Start();
         }
 
         private void FullscreenMotionVideo_MediaEnded(object sender, RoutedEventArgs e)
         {
+            // Reset position to zero and continue playback without tearing down the DirectShow graph
             FullscreenMotionVideo.Position = TimeSpan.Zero;
             FullscreenMotionVideo.Play();
         }
 
+        private void MotionVideoBackdrop_MediaEnded(object sender, RoutedEventArgs e)
+        {
+            if (MotionVideoBackdrop != null)
+            {
+                MotionVideoBackdrop.Position = TimeSpan.Zero;
+                MotionVideoBackdrop.Play();
+            }
+        }
+
         private void FullscreenMotionVideo_MediaFailed(object sender, ExceptionRoutedEventArgs e)
         {
-            FullscreenMotionVideo.Opacity = 0;
+            _fullscreenVideoFrameTimer?.Stop();
+            _fullscreenVideoFrameTimer = null;
+
+            if (MotionVideoBackdrop != null)
+            {
+                MotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, null);
+                MotionVideoBackdrop.Opacity = 0.0;
+                MotionVideoBackdrop.Stop();
+                MotionVideoBackdrop.Source = null;
+            }
+
+            App.Log($"[MotionArtwork] FullscreenMotionVideo MediaFailed: {e.ErrorException?.Message}");
+            if (_currentMotionResult?.FallbackUrl != null && !_hasAttemptedFallback)
+            {
+                _hasAttemptedFallback = true;
+                App.Log($"[MotionArtwork] Retrying FullscreenMotionVideo with FallbackUrl: {_currentMotionResult.FallbackUrl}");
+                var uri = _currentMotionResult.FallbackUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(_currentMotionResult.FallbackUrl, UriKind.Absolute)
+                    : new Uri(System.IO.Path.GetFullPath(_currentMotionResult.FallbackUrl), UriKind.Absolute);
+                FullscreenMotionVideo.Source = uri;
+                FullscreenMotionVideo.Stop();
+                FullscreenMotionVideo.Play();
+                if (MotionVideoBackdrop != null)
+                {
+                    MotionVideoBackdrop.Source = uri;
+                    MotionVideoBackdrop.Stop();
+                    MotionVideoBackdrop.Play();
+                }
+            }
+            else
+            {
+                if (FullscreenCoverImage != null)
+                {
+                    FullscreenCoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                    FullscreenCoverImage.Opacity = 1.0;
+                }
+            }
         }
     }
 }
