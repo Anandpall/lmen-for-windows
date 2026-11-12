@@ -74,44 +74,53 @@ namespace LmenV2.Rendering.Kinetic
         }
 
         /// <summary>
-        /// Group lyric words into at most maxRows of similar visual width.
+        /// Maximum words that share one row. Keeping this low keeps the type large and
+        /// stops rows from being squeezed to fit several words at once.
+        /// </summary>
+        public const int MaxWordsPerRow = 2;
+
+        /// <summary>
+        /// Chance that a row is allowed to hold a third word, for occasional rhythm
+        /// variation. Deliberately tiny so three-up rows stay rare.
+        /// </summary>
+        public const double TripleWordRowChance = 0.01;
+
+        /// <summary>
+        /// Group lyric words into short rows of at most two words (rarely three).
+        /// Rows are split in reading order; width is no longer used to pack more words
+        /// onto a line, so the layout never has to shrink or squish the type.
         /// </summary>
         public static List<List<LyricWord>> GroupRows(List<LyricWord> words, int maxRows)
         {
             var result = new List<List<LyricWord>>();
             if (words == null || words.Count == 0) return result;
 
-            if (words.Count <= maxRows)
-            {
-                foreach (var w in words)
-                {
-                    result.Add(new List<LyricWord> { w });
-                }
-                return result;
-            }
-
-            double total = 0;
+            // Deterministic per-line seed so a line always keeps the same rhythm.
+            uint seed = (uint)words.Count * 2654435761u;
             foreach (var w in words)
             {
-                total += VisualLength(w.Text) + 0.3;
+                seed ^= HashString(w.Text);
+                seed *= 16777619u;
             }
+            var rng = CreateRng(seed ^ (uint)maxRows);
 
-            double target = total / maxRows;
-            var current = new List<LyricWord>();
-            result.Add(current);
-            double width = 0;
-
-            foreach (var w in words)
+            int index = 0;
+            while (index < words.Count)
             {
-                double len = VisualLength(w.Text) + 0.3;
-                if (width > 0 && width + len / 2.0 > target && result.Count < maxRows)
+                int remaining = words.Count - index;
+                int take = Math.Min(MaxWordsPerRow, remaining);
+
+                if (remaining >= MaxWordsPerRow + 1 && rng() < TripleWordRowChance)
                 {
-                    current = new List<LyricWord>();
-                    result.Add(current);
-                    width = 0;
+                    take = MaxWordsPerRow + 1;
                 }
-                current.Add(w);
-                width += len;
+
+                var row = new List<LyricWord>(take);
+                for (int k = 0; k < take; k++)
+                {
+                    row.Add(words[index++]);
+                }
+                result.Add(row);
             }
 
             return result;
