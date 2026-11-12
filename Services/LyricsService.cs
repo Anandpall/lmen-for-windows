@@ -287,30 +287,44 @@ namespace LmenV2.Services
                 }, cancelToken)
             ));
 
-            // 7. BitChord Racing Resolution:
-            // Awaits jobs in priority sequence. A word-synced winner wins outright;
-            // failing that the highest-priority timed answer; failing that a plain
-            // one — and Genius, the web scraper, only then.
+            // 7. True Concurrent Racing Resolution:
+            // Process tasks as they finish via Task.WhenAny so fast providers (e.g. LRCLIB 200ms)
+            // aren't blocked waiting for slower providers.
             LyricProviderResult? winningResult = null;
             LyricProviderResult? fallbackLineSynced = null;
             LyricProviderResult? fallbackPlain = null;
 
             try
             {
-                foreach (var (id, name, task) in providerTasks)
+                var pendingTasks = providerTasks.Select(p => p.task).ToList();
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                using var linkedTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancelToken, timeoutCts.Token);
+                var overallTimeout = Task.Delay(TimeSpan.FromSeconds(6), linkedTimeoutCts.Token);
+
+                while (pendingTasks.Count > 0)
                 {
+                    var completedTask = await Task.WhenAny(pendingTasks.Concat(new[] { (Task)overallTimeout }));
+                    if (completedTask == overallTimeout)
+                    {
+                        break;
+                    }
+
+                    var typedTask = (Task<LyricProviderResult?>)completedTask;
+                    pendingTasks.Remove(typedTask);
+
                     try
                     {
-                        var res = await task;
+                        var res = await typedTask;
                         if (res == null) continue;
                         if (!res.IsSynced && string.IsNullOrWhiteSpace(res.PlainLyrics)) continue;
 
                         if (res.IsWordSynced)
                         {
                             winningResult = res;
-                            raceCts.Cancel();
+                            try { raceCts.Cancel(); } catch { }
                             break;
                         }
+
                         if (res.IsTimed)
                         {
                             fallbackLineSynced ??= res;
@@ -321,12 +335,16 @@ namespace LmenV2.Services
                         }
                     }
                     catch { }
+
+                    // If we already have a timed result and only a few tasks remain, finish promptly
+                    if (fallbackLineSynced != null && pendingTasks.Count <= 3)
+                    {
+                        break;
+                    }
                 }
 
                 if (winningResult == null && fallbackLineSynced == null)
                 {
-                    // Genius is a plain-text scraper; contacted only when every
-                    // timed source missed, to save bandwidth and avoid rate limits.
                     try
                     {
                         var genius = await LyricsProviders.Genius.GetLyricsAsync(cleanTitle, cleanArtist, _httpClient, ct);

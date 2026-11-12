@@ -12,6 +12,7 @@
         KeyDown="Window_KeyDown"
         Loaded="Window_Loaded"
         SizeChanged="Window_SizeChanged"
+        MouseMove="Window_MouseMove"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
     <Window.Resources>
@@ -307,6 +308,150 @@
             <Setter Property="Effect">
                 <Setter.Value>
                     <DropShadowEffect Color="#000000" BlurRadius="42" ShadowDepth="10" Direction="270" Opacity="0.55"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ========================================================= -->
+        <!-- LYRICS STAGE CHIP BUTTONS (dark sticker pills, hot-pink rim) -->
+        <!-- ========================================================= -->
+        <Style x:Key="LyricsChipButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#F2FFFFFF"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <ScaleTransform x:Name="chipScale" ScaleX="1" ScaleY="1"/>
+                            </Grid.RenderTransform>
+                            <Border x:Name="chipFill" CornerRadius="999">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#E6100A12" Offset="0"/>
+                                        <GradientStop Color="#D9080509" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="2" Opacity="0.38"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="chipRim"
+                                    CornerRadius="999"
+                                    BorderThickness="1"
+                                    BorderBrush="#3DFF4D80"
+                                    Background="#00000000"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="chipRim" Property="BorderBrush" Value="#B8FF4D80"/>
+                                <Setter TargetName="chipRim" Property="Background" Value="#2EFF4D80"/>
+                                <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="chipScale" Storyboard.TargetProperty="ScaleX" To="1.05" Duration="0:0:0.12">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="chipScale" Storyboard.TargetProperty="ScaleY" To="1.05" Duration="0:0:0.12">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="chipScale" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="chipScale" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="chipRim" Property="Background" Value="#4DFF4D80"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Primary (filled hot-pink) variant for exiting lyrics -->
+        <Style x:Key="LyricsExitChipButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <ScaleTransform x:Name="exitScale" ScaleX="1" ScaleY="1"/>
+                            </Grid.RenderTransform>
+                            <Border x:Name="exitFill" CornerRadius="999">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#FFFF3D71" Offset="0"/>
+                                        <GradientStop Color="#FFE01E52" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FF2D63" BlurRadius="18" ShadowDepth="0" Opacity="0.55"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="exitRim"
+                                    CornerRadius="999"
+                                    BorderThickness="1"
+                                    BorderBrush="#66FFFFFF"
+                                    Background="#00000000"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="exitFill" Property="Opacity" Value="1.0"/>
+                                <Setter TargetName="exitRim" Property="BorderBrush" Value="#AAFFFFFF"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="exitScale" Storyboard.TargetProperty="ScaleX" To="1.05" Duration="0:0:0.12"/>
+                                            <DoubleAnimation Storyboard.TargetName="exitScale" Storyboard.TargetProperty="ScaleY" To="1.05" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="exitScale" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="exitScale" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="exitFill" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
@@ -790,9 +935,10 @@
                               IsMuted="True"
                               ScrubbingEnabled="True"
                               Opacity="0.0"
+                              Visibility="Collapsed"
                               MediaEnded="TvMotionVideoBackdrop_MediaEnded">
                     <MediaElement.Effect>
-                        <BlurEffect Radius="65" KernelType="Gaussian" RenderingBias="Performance"/>
+                        <BlurEffect Radius="24" KernelType="Box" RenderingBias="Performance"/>
                     </MediaElement.Effect>
                 </MediaElement>
             </Grid>
@@ -820,7 +966,8 @@
         <!-- TOP-RIGHT WINDOW CONTROLS: Settings, Minimize, Restore, Close -->
         <!-- Frosted Liquid Glass Button Capsule                       -->
         <!-- ========================================================= -->
-        <Border HorizontalAlignment="Right"
+        <Border x:Name="WindowControlsBar"
+                HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Margin="0,18,22,0"
                 Panel.ZIndex="50"
@@ -1382,11 +1529,12 @@
               VerticalAlignment="Stretch"
               Visibility="Collapsed">
 
-            <!-- Top Floating Header Bar (Subtle & Minimalist) -->
-            <Grid VerticalAlignment="Top" Margin="48,32,48,0" Panel.ZIndex="10">
+            <!-- Top Floating Header Bar (auto-hides while the mouse is idle) -->
+            <Grid x:Name="LyricsHeaderBar" VerticalAlignment="Top" Margin="48,32,48,0" Panel.ZIndex="10" Opacity="1">
                 <!-- Track Info Pill: Title & Artist -->
                 <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top">
-                    <Border BorderThickness="1"
+                    <Border x:Name="LyricsTitlePill"
+                            BorderThickness="1"
                             CornerRadius="16"
                             Padding="16,8"
                             HorizontalAlignment="Left">
@@ -1432,10 +1580,10 @@
                 </StackPanel>
 
                 <!-- Right Action Controls: Translate / Romanize / Offset / Style / Close -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel x:Name="LyricsActionPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <!-- Translate Lyrics -->
                     <Button x:Name="LyricsTranslateButton"
-                            Style="{StaticResource FrostedPillButton}"
+                            Style="{StaticResource LyricsChipButton}"
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsTranslate_Click"
@@ -1443,13 +1591,13 @@
                             ToolTip="Translate lyrics into the language chosen in Settings">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="LyricsTranslateText" Text="Translate" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="LyricsTranslateText" Text="TRANSLATE" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
                     <!-- Romanize Lyrics -->
                     <Button x:Name="LyricsRomanizeButton"
-                            Style="{StaticResource FrostedPillButton}"
+                            Style="{StaticResource LyricsChipButton}"
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsRomanize_Click"
@@ -1457,13 +1605,13 @@
                             ToolTip="Show non-Latin lyrics in the Latin alphabet">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Aa" FontSize="11" FontWeight="Bold" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="LyricsRomanizeText" Text="Romanize" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="LyricsRomanizeText" Text="ROMANIZE" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
                     <!-- Manual Sync Offset -->
                     <Button x:Name="LyricsOffsetButton"
-                            Style="{StaticResource FrostedPillButton}"
+                            Style="{StaticResource LyricsChipButton}"
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsOffsetButton_Click"
@@ -1471,13 +1619,13 @@
                             ToolTip="Shift lyric timing to match the recording">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE916;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Offset" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="OFFSET" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
                     <!-- Lyric Source Picker -->
                     <Button x:Name="LyricsProviderButton"
-                            Style="{StaticResource FrostedPillButton}"
+                            Style="{StaticResource LyricsChipButton}"
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsProviderButton_Click"
@@ -1485,46 +1633,46 @@
                             ToolTip="Choose where these lyrics come from">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE71D;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Source" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="SOURCE" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
-                    <!-- Style Toggle: Stage (BitChord) vs Fisheye Lens (Verci) -->
+                    <!-- Style Toggle: Kinetic Typography Templates (LyricalStudio) -->
                     <Button x:Name="LyricsStyleToggleButton"
-                            Style="{StaticResource FrostedPillButton}"
+                            Style="{StaticResource LyricsChipButton}"
                             Padding="13,7"
                             Margin="0,0,10,0"
                             Click="LyricsStyleToggle_Click"
-                            AutomationProperties.Name="Switch Lyrics Style"
-                            ToolTip="Switch Style: Stage (BitChord) / Fisheye Lens (Verci) [S]">
+                            AutomationProperties.Name="Switch Lyrics Template"
+                            ToolTip="Switch Kinetic Typography Template: Auto Style, Sticker, Fisheye Lens, Stack, Slide, Zoom, Letters, Scatter, Graph, Flow [S]">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock x:Name="LyricsStyleIcon" Text="📜" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="LyricsStyleText" Text="Stage View" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="LyricsStyleIcon" Text="✨" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="LyricsStyleText" Text="AUTO STYLE" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
                     <!-- Exit Fullscreen Lyrics Button -->
                     <Button x:Name="ExitLyricsButton"
-                            Style="{StaticResource FrostedPillButton}"
+                            Style="{StaticResource LyricsExitChipButton}"
                             Padding="16,7"
                             Click="ExitLyrics_Click"
                             AutomationProperties.Name="Close Lyrics"
                             ToolTip="Return to Player (Esc / L)">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Close Lyrics" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="CLOSE" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>
 
-            <!-- Fisheye Lens Stage (Verci Style) -->
-            <Canvas x:Name="FisheyeLyricsCanvas"
+            <!-- Cotodama / LyricalStudio Kinetic Typography Stage (Sticker, Stack, Slide, Zoom, Letters, Scatter, Graph, Flow, Auto) -->
+            <Canvas x:Name="KineticLyricsCanvas"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     ClipToBounds="True"
                     Background="Transparent"
-                    Visibility="Collapsed"/>
+                    Visibility="Visible"/>
 
             <!-- Center Stage: Frictionless Fullscreen Smooth Lyrics Scroller (Stage Style - BitChord exact port) -->
             <ScrollViewer x:Name="LyricsScrollViewer"
@@ -1545,11 +1693,11 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- Top & Bottom Soft Vignette Fades -->
+            <!-- Top & Bottom Soft Vignette Fades (translucent so the blurred album backdrop shows through) -->
             <Rectangle Height="140" VerticalAlignment="Top" IsHitTestVisible="False">
                 <Rectangle.Fill>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#EE0A0608" Offset="0"/>
+                        <GradientStop Color="#8A0A0608" Offset="0"/>
                         <GradientStop Color="#000A0608" Offset="1"/>
                     </LinearGradientBrush>
                 </Rectangle.Fill>
@@ -1558,7 +1706,7 @@
                 <Rectangle.Fill>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#000A0608" Offset="0"/>
-                        <GradientStop Color="#EE0A0608" Offset="1"/>
+                        <GradientStop Color="#8A0A0608" Offset="1"/>
                     </LinearGradientBrush>
                 </Rectangle.Fill>
             </Rectangle>
@@ -1693,7 +1841,7 @@
 
             <!-- "Sync to Track" Floating Pill Button -->
             <Button x:Name="SyncLyricsPillButton"
-                    Style="{StaticResource FrostedPillButton}"
+                    Style="{StaticResource LyricsChipButton}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
                     Margin="0,0,0,32"
@@ -1740,9 +1888,10 @@
                           IsMuted="True"
                           ScrubbingEnabled="True"
                           Opacity="0.0"
+                          Visibility="Collapsed"
                           MediaEnded="MotionVideoBackdrop_MediaEnded">
                 <MediaElement.Effect>
-                    <BlurEffect Radius="65" KernelType="Gaussian" RenderingBias="Performance"/>
+                    <BlurEffect Radius="24" KernelType="Box" RenderingBias="Performance"/>
                 </MediaElement.Effect>
             </MediaElement>
 
@@ -1824,7 +1973,7 @@
                 <!-- Exit Fullscreen Animated Cover Button -->
                 <Button x:Name="ExitMotionButton"
                         HorizontalAlignment="Right"
-                        Style="{StaticResource FrostedPillButton}"
+                        Style="{StaticResource LyricsExitChipButton}"
                         Padding="16,7"
                         Click="ExitMotion_Click"
                         AutomationProperties.Name="Close Fullscreen Motion Artwork"

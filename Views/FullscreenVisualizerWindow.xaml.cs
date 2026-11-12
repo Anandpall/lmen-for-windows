@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using LmenV2.Models;
 using LmenV2.Rendering;
+using LmenV2.Rendering.Kinetic;
 using LmenV2.Services;
 
 namespace LmenV2.Views
@@ -61,21 +62,16 @@ namespace LmenV2.Views
         // Performance optimizations: frame throttling & deadbands
         private int _renderFrameCount = 0;
         private double _lastArtShadowDir = double.MinValue;
-        private double _lastArtShadowBlur = double.MinValue;
-        private double _lastArtShadowDepth = double.MinValue;
         private double _lastArtShadowOpacity = double.MinValue;
         private Color _lastArtShadowColor = Colors.Transparent;
 
         private SolidColorBrush? _cardBorderBrush;
-        private double _lastCardShadowBlur = double.MinValue;
         private double _lastCardShadowOpacity = double.MinValue;
         private Color _lastCardShadowColor = Colors.Transparent;
 
-        private double _lastGlowShadowBlur = double.MinValue;
         private double _lastGlowShadowOpacity = double.MinValue;
         private Color _lastGlowShadowColor = Colors.Transparent;
 
-        private double _lastPlayShadowBlur = double.MinValue;
         private double _lastPlayShadowOpacity = double.MinValue;
         private Color _lastPlayShadowColor = Colors.Transparent;
 
@@ -109,6 +105,7 @@ namespace LmenV2.Views
         private double _currentScrollOffset = 0.0;
         private bool _isUserScrolledAway = false;
         private System.Windows.Threading.DispatcherTimer? _userScrollResumeTimer;
+        private System.Windows.Threading.DispatcherTimer? _lyricsChromeTimer;
         private readonly List<LyricLineItem> _lyricItems = new List<LyricLineItem>();
 
         // BitChord lyrics tools: source picker, translate / romanize, manual sync offset
@@ -134,29 +131,8 @@ namespace LmenV2.Views
         private System.Windows.Threading.DispatcherTimer? _fullscreenVideoFrameTimer;
         private System.Windows.Threading.DispatcherTimer? _motionBarFadeTimer;
 
-        // Display Style: Stage (BitChord) vs Fisheye Lens (Verci)
-        public enum LyricDisplayStyle
-        {
-            Stage,
-            Fisheye
-        }
-        private LyricDisplayStyle _currentDisplayStyle = LyricDisplayStyle.Stage;
-        private readonly List<FisheyeWordItem> _allFisheyeWords = new List<FisheyeWordItem>();
-        private readonly List<FisheyeWordVisualNode> _fisheyeNodes = new List<FisheyeWordVisualNode>();
-        private double _smoothedFisheyeIndex = 0.0;
-
-        private class FisheyeWordVisualNode
-        {
-            public Border Container { get; set; } = null!;
-            public Border PillBorder { get; set; } = null!;
-            public TextBlock WordTextBlock { get; set; } = null!;
-            public Border SymbolBadge { get; set; } = null!;
-            public TextBlock SymbolTextBlock { get; set; } = null!;
-            public ScaleTransform ScaleTransform { get; set; } = null!;
-            public RotateTransform RotateTransform { get; set; } = null!;
-            public TranslateTransform TranslateTransform { get; set; } = null!;
-            public FisheyeWordItem? BoundWord { get; set; }
-        }
+        // Cotodama / LyricalStudio Kinetic Typography Stage Renderer
+        private KineticStageRenderer? _kineticRenderer;
 
         // High-precision Monotonic Clock Reconciler (BitChord protection against GSMTC transport lag)
         private readonly LyricClockReconciler _lyricClock = new LyricClockReconciler();
@@ -351,7 +327,7 @@ namespace LmenV2.Views
             _savedRestoredBounds = new Rect(rx, ry, rw, rh);
 
             InitSliderValues();
-            InitFisheyeVisualPool();
+            _kineticRenderer = new KineticStageRenderer(KineticLyricsCanvas);
             ApplyGeometry();
             UpdateWindowClip();
             UpdateColors(_mediaService.CurrentTrack);
@@ -541,9 +517,9 @@ namespace LmenV2.Views
             _beam.EaseColor(dt);
 
             // 2.5 REAL-TIME LIGHT PROXIMITY & SPECULAR REFLECTION:
-            // Sub-sampled to every 2nd frame with deadband thresholds to eliminate continuous DropShadow invalidation
+            // Sub-sampled to every 2nd frame. When in lyrics mode, skip completely to preserve 100% GPU for kinetic stage.
             _renderFrameCount++;
-            if ((_renderFrameCount & 1) == 0)
+            if (!_isLyricsMode && (_renderFrameCount & 1) == 0)
             {
                 Color currentLightColor = _beam.CurrentColor;
                 double winW = ActualWidth > 0 ? ActualWidth : 1920.0;
@@ -558,9 +534,15 @@ namespace LmenV2.Views
                     double lightAngle = _beam.GetLightAngleFromPoint(artCenterX, artCenterY);
 
                     double targetDir = lightAngle + 180.0;
-                    double targetBlur = 24.0 + (artLightIllum * 52.0);
-                    double targetDepth = 4.0 + (artLightIllum * 16.0);
                     double targetOpacity = 0.28 + (artLightIllum * 0.55);
+
+                    // Keep BlurRadius fixed at optimal 36.0 to prevent costly offscreen re-rasterization
+                    if (ArtDropShadow.BlurRadius != 36.0)
+                    {
+                        ArtDropShadow.BlurRadius = 36.0;
+                        ArtDropShadow.ShadowDepth = 6.0;
+                        ArtDropShadow.RenderingBias = RenderingBias.Performance;
+                    }
 
                     if (_lastArtShadowColor != currentLightColor)
                     {
@@ -571,16 +553,6 @@ namespace LmenV2.Views
                     {
                         _lastArtShadowDir = targetDir;
                         ArtDropShadow.Direction = targetDir;
-                    }
-                    if (Math.Abs(targetBlur - _lastArtShadowBlur) >= 1.5)
-                    {
-                        _lastArtShadowBlur = targetBlur;
-                        ArtDropShadow.BlurRadius = targetBlur;
-                    }
-                    if (Math.Abs(targetDepth - _lastArtShadowDepth) >= 1.0)
-                    {
-                        _lastArtShadowDepth = targetDepth;
-                        ArtDropShadow.ShadowDepth = targetDepth;
                     }
                     if (Math.Abs(targetOpacity - _lastArtShadowOpacity) >= 0.02)
                     {
@@ -608,7 +580,12 @@ namespace LmenV2.Views
                     if (QuickGlowControlsCard.Effect is DropShadowEffect cardShadow)
                     {
                         double targetCardOpacity = 0.30 + (cardLightIllum * 0.45);
-                        double targetCardBlur = 24.0 + (cardLightIllum * 26.0);
+
+                        if (cardShadow.BlurRadius != 24.0)
+                        {
+                            cardShadow.BlurRadius = 24.0;
+                            cardShadow.RenderingBias = RenderingBias.Performance;
+                        }
 
                         if (_lastCardShadowColor != currentLightColor)
                         {
@@ -620,11 +597,6 @@ namespace LmenV2.Views
                             _lastCardShadowOpacity = targetCardOpacity;
                             cardShadow.Opacity = targetCardOpacity;
                         }
-                        if (Math.Abs(targetCardBlur - _lastCardShadowBlur) >= 1.5)
-                        {
-                            _lastCardShadowBlur = targetCardBlur;
-                            cardShadow.BlurRadius = targetCardBlur;
-                        }
                     }
                 }
 
@@ -635,18 +607,18 @@ namespace LmenV2.Views
                     double glowBtnCenterY = winH * 0.77;
                     double btnLightIllum = _beam.GetIlluminationAtPoint(glowBtnCenterX, glowBtnCenterY, reachRadius: 600.0);
 
-                    double targetGlowBlur = 12.0 + (btnLightIllum * 24.0);
                     double targetGlowOpacity = _audioReactivityEnabled ? (0.22 + (btnLightIllum * 0.68)) : 0.0;
+
+                    if (ReactiveGlowShadow.BlurRadius != 16.0)
+                    {
+                        ReactiveGlowShadow.BlurRadius = 16.0;
+                        ReactiveGlowShadow.RenderingBias = RenderingBias.Performance;
+                    }
 
                     if (_lastGlowShadowColor != currentLightColor)
                     {
                         _lastGlowShadowColor = currentLightColor;
                         ReactiveGlowShadow.Color = currentLightColor;
-                    }
-                    if (Math.Abs(targetGlowBlur - _lastGlowShadowBlur) >= 1.5)
-                    {
-                        _lastGlowShadowBlur = targetGlowBlur;
-                        ReactiveGlowShadow.BlurRadius = targetGlowBlur;
                     }
                     if (Math.Abs(targetGlowOpacity - _lastGlowShadowOpacity) >= 0.02)
                     {
@@ -662,18 +634,18 @@ namespace LmenV2.Views
                     double playCenterY = winH * 0.69;
                     double playLightIllum = _beam.GetIlluminationAtPoint(playCenterX, playCenterY, reachRadius: 620.0);
 
-                    double targetPlayBlur = 14.0 + (playLightIllum * 20.0);
                     double targetPlayOpacity = 0.20 + (playLightIllum * 0.55);
+
+                    if (PlayPauseShadow.BlurRadius != 18.0)
+                    {
+                        PlayPauseShadow.BlurRadius = 18.0;
+                        PlayPauseShadow.RenderingBias = RenderingBias.Performance;
+                    }
 
                     if (_lastPlayShadowColor != currentLightColor)
                     {
                         _lastPlayShadowColor = currentLightColor;
                         PlayPauseShadow.Color = currentLightColor;
-                    }
-                    if (Math.Abs(targetPlayBlur - _lastPlayShadowBlur) >= 1.5)
-                    {
-                        _lastPlayShadowBlur = targetPlayBlur;
-                        PlayPauseShadow.BlurRadius = targetPlayBlur;
                     }
                     if (Math.Abs(targetPlayOpacity - _lastPlayShadowOpacity) >= 0.02)
                     {
@@ -707,17 +679,11 @@ namespace LmenV2.Views
                 UpdatePlaybackTimeUI(_currentTrackPosition, _currentTrackDuration);
             }
 
-            // 5. TIMED LYRICS SYNC (Verci Fisheye Lens vs Stage View)
-            if (_isLyricsMode && _currentLyrics != null && _currentLyrics.IsSynced)
+            // 5. TIMED LYRICS SYNC (Cotodama / LyricalStudio Kinetic Stage Engine)
+            if (_isLyricsMode && _kineticRenderer != null)
             {
-                if (_currentDisplayStyle == LyricDisplayStyle.Fisheye)
-                {
-                    UpdateFisheyeLyricsFrame(dt);
-                }
-                else if (_lyricItems.Count > 0)
-                {
-                    UpdateLyricsFrame(dt);
-                }
+                var lyricPos = LyricClockPosition;
+                _kineticRenderer.UpdateFrame(lyricPos, dt);
             }
 
             // 6. ACCESSIBLE TASKBAR ON HOVER (WHEN IN FULLSCREEN MODE)
@@ -945,6 +911,11 @@ namespace LmenV2.Views
 
             Color effectiveColor = _customColorOverride ?? track.DominantColor;
             ApplyGlowColor(effectiveColor);
+
+            if (_currentLyrics != null)
+            {
+                _kineticRenderer?.SetLyrics(_currentLyrics, track.Title ?? "Ready to Play", track.Artist ?? "Play music to begin", effectiveColor, track.AccentColor);
+            }
         }
 
         private void ApplyGlowColor(Color dom)
@@ -1710,20 +1681,12 @@ namespace LmenV2.Views
             }
             else if (e.Key == Key.L)
             {
-                if (_isLyricsMode)
-                {
-                    SetLyricsMode(false);
-                    e.Handled = true;
-                }
-                else if (_currentLyrics != null && _currentLyrics.HasLyrics)
-                {
-                    SetLyricsMode(true);
-                    e.Handled = true;
-                }
+                SetLyricsMode(!_isLyricsMode);
+                e.Handled = true;
             }
             else if (e.Key == Key.S && _isLyricsMode)
             {
-                SetLyricDisplayStyle(_currentDisplayStyle == LyricDisplayStyle.Fisheye ? LyricDisplayStyle.Stage : LyricDisplayStyle.Fisheye);
+                CycleLyricsTemplate();
                 e.Handled = true;
             }
             else if (e.Key == Key.Space)
@@ -2385,23 +2348,11 @@ namespace LmenV2.Views
 
         private void ToggleLyrics_Click(object sender, RoutedEventArgs e)
         {
-            if (_isLyricsMode)
-            {
-                SetLyricsMode(false);
-            }
-            else if (_currentLyrics != null && _currentLyrics.HasLyrics)
-            {
-                SetLyricsMode(true);
-            }
+            SetLyricsMode(!_isLyricsMode);
         }
 
         public void SetLyricsMode(bool enabled)
         {
-            if (enabled && (_currentLyrics == null || !_currentLyrics.HasLyrics))
-            {
-                return;
-            }
-
             _isLyricsMode = enabled;
             UpdateLyricsModeUI();
         }
@@ -2410,66 +2361,47 @@ namespace LmenV2.Views
         {
             if (LyricsButton != null)
             {
-                if (isChecking)
+                LyricsButton.IsEnabled = true;
+                if (_isLyricsMode)
                 {
-                    if (!_isLyricsMode)
+                    LyricsButton.Opacity = 1.0;
+                    LyricsButton.Cursor = System.Windows.Input.Cursors.Hand;
+                    LyricsButton.ToolTip = "Close Lyrics Mode (L)";
+                    if (LyricsButtonIcon != null)
                     {
-                        LyricsButton.IsEnabled = false;
-                        LyricsButton.Opacity = 0.50;
-                        LyricsButton.Cursor = System.Windows.Input.Cursors.Wait;
-                        LyricsButton.ToolTip = "Checking for timed lyrics...";
-                        if (LyricsButtonIcon != null)
-                        {
-                            LyricsButtonIcon.Foreground = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255));
-                        }
+                        LyricsButtonIcon.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118));
+                    }
+                }
+                else if (isChecking)
+                {
+                    LyricsButton.Opacity = 0.85;
+                    LyricsButton.Cursor = System.Windows.Input.Cursors.Hand;
+                    LyricsButton.ToolTip = "Finding lyrics... (L)";
+                    if (LyricsButtonIcon != null)
+                    {
+                        LyricsButtonIcon.Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255));
                     }
                 }
                 else
                 {
-                    if (_isLyricsMode)
+                    LyricsButton.Opacity = hasLyrics ? 1.0 : 0.70;
+                    LyricsButton.Cursor = System.Windows.Input.Cursors.Hand;
+                    LyricsButton.ToolTip = hasLyrics
+                        ? (isInstrumental ? "Instrumental Track (L)" : "Timed Lyrics Mode (L)")
+                        : "Timed Lyrics Mode (L)";
+                    if (LyricsButtonIcon != null)
                     {
-                        LyricsButton.IsEnabled = true;
-                        LyricsButton.Opacity = 1.0;
-                        LyricsButton.Cursor = System.Windows.Input.Cursors.Hand;
-                        LyricsButton.ToolTip = "Close Lyrics Mode (L)";
-                        if (LyricsButtonIcon != null)
-                        {
-                            LyricsButtonIcon.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118));
-                        }
-                    }
-                    else
-                    {
-                        LyricsButton.IsEnabled = hasLyrics;
-                        LyricsButton.Opacity = hasLyrics ? 1.0 : 0.30;
-                        LyricsButton.Cursor = hasLyrics ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.No;
-                        LyricsButton.ToolTip = !hasLyrics
-                            ? "Lyrics not available for this song"
-                            : (isInstrumental ? "Instrumental Track (L)" : "Timed Lyrics Mode (L)");
-
-                        if (LyricsButtonIcon != null)
-                        {
-                            LyricsButtonIcon.Foreground = hasLyrics
-                                ? new SolidColorBrush(Color.FromArgb(216, 255, 255, 255))
-                                : new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
-                        }
+                        LyricsButtonIcon.Foreground = hasLyrics
+                            ? new SolidColorBrush(Color.FromArgb(235, 255, 255, 255))
+                            : new SolidColorBrush(Color.FromArgb(160, 255, 255, 255));
                     }
                 }
             }
 
             if (MenuLyricsToggle != null)
             {
-                if (isChecking)
-                {
-                    MenuLyricsToggle.IsEnabled = false;
-                    MenuLyricsToggle.Header = "Checking Lyrics...";
-                }
-                else
-                {
-                    MenuLyricsToggle.IsEnabled = hasLyrics || _isLyricsMode;
-                    MenuLyricsToggle.Header = !hasLyrics
-                        ? (_isLyricsMode ? "Close Lyrics (L)" : "Timed Lyrics (Unavailable)")
-                        : (isInstrumental ? "Instrumental Track (L)" : (_isLyricsMode ? "Close Lyrics (L)" : "Timed Lyrics (L)"));
-                }
+                MenuLyricsToggle.IsEnabled = true;
+                MenuLyricsToggle.Header = _isLyricsMode ? "Close Lyrics (L)" : "Timed Lyrics (L)";
             }
         }
 
@@ -2485,7 +2417,7 @@ namespace LmenV2.Views
             {
                 VisualizerContentGrid.Visibility = Visibility.Collapsed;
                 FullscreenLyricsStage.Visibility = Visibility.Visible;
-                SetLyricDisplayStyle(_currentDisplayStyle);
+                UpdateLyricStageVisibility();
 
                 if (_mediaService.CurrentTrack != null)
                 {
@@ -2497,12 +2429,184 @@ namespace LmenV2.Views
                 {
                     _ = LoadLyricsForCurrentSongAsync(_mediaService.CurrentTrack);
                 }
+
+                // Chrome is immersive by default: visible briefly, then fades with mouse idle
+                _lastLyricsChromeMousePos = System.Windows.Input.Mouse.GetPosition(this);
+                RevealLyricsChrome();
             }
             else
             {
                 FullscreenLyricsStage.Visibility = Visibility.Collapsed;
                 VisualizerContentGrid.Visibility = Visibility.Visible;
+                ResetLyricsChrome();
             }
+
+            UpdateWindowChromeVisibility();
+        }
+
+        // =========================================================
+        // IMMERSIVE LYRICS CHROME: auto-hide UI until the mouse moves
+        // =========================================================
+
+        private System.Windows.Point _lastLyricsChromeMousePos;
+
+        private void Window_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (!_isLyricsMode) return;
+
+            // WPF re-raises MouseMove while animated lyrics shift under a still cursor.
+            // Only treat this as real user movement when the pointer actually moved.
+            var pos = e.GetPosition(this);
+            if (Math.Abs(pos.X - _lastLyricsChromeMousePos.X) < 0.5 &&
+                Math.Abs(pos.Y - _lastLyricsChromeMousePos.Y) < 0.5)
+            {
+                return;
+            }
+
+            _lastLyricsChromeMousePos = pos;
+            RevealLyricsChrome();
+        }
+
+        private void RevealLyricsChrome()
+        {
+            if (!_isLyricsMode || LyricsHeaderBar == null) return;
+
+            if (LyricsHeaderBar.Visibility != Visibility.Visible)
+            {
+                LyricsHeaderBar.BeginAnimation(UIElement.OpacityProperty, null);
+                LyricsHeaderBar.Opacity = 0.0;
+                LyricsHeaderBar.Visibility = Visibility.Visible;
+            }
+
+            LyricsHeaderBar.IsHitTestVisible = true;
+            if (LyricsHeaderBar.Opacity < 0.99)
+            {
+                var fadeIn = new DoubleAnimation
+                {
+                    To = 1.0,
+                    Duration = TimeSpan.FromMilliseconds(160),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                LyricsHeaderBar.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+            }
+
+            if (SyncLyricsPillButton != null)
+            {
+                SyncLyricsPillButton.BeginAnimation(UIElement.OpacityProperty, null);
+                SyncLyricsPillButton.Opacity = 1.0;
+                SyncLyricsPillButton.IsHitTestVisible = true;
+            }
+
+            ResetLyricsChromeTimer();
+        }
+
+        private void ResetLyricsChromeTimer()
+        {
+            if (!_isLyricsMode) return;
+
+            if (_lyricsChromeTimer == null)
+            {
+                _lyricsChromeTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(2.6)
+                };
+                _lyricsChromeTimer.Tick += LyricsChromeTimer_Tick;
+            }
+
+            _lyricsChromeTimer.Stop();
+            _lyricsChromeTimer.Start();
+        }
+
+        private void LyricsChromeTimer_Tick(object? sender, EventArgs e)
+        {
+            _lyricsChromeTimer?.Stop();
+            if (!_isLyricsMode) return;
+
+            // Never fade while hovering the chrome or while a lyrics dialog is open
+            if ((LyricsTitlePill != null && LyricsTitlePill.IsMouseOver) ||
+                (LyricsActionPanel != null && LyricsActionPanel.IsMouseOver))
+            {
+                ResetLyricsChromeTimer();
+                return;
+            }
+            if (SyncLyricsPillButton != null && SyncLyricsPillButton.IsMouseOver)
+            {
+                ResetLyricsChromeTimer();
+                return;
+            }
+            if ((LyricsOffsetOverlay != null && LyricsOffsetOverlay.Visibility == Visibility.Visible) ||
+                (LyricsProviderOverlay != null && LyricsProviderOverlay.Visibility == Visibility.Visible))
+            {
+                ResetLyricsChromeTimer();
+                return;
+            }
+
+            HideLyricsChrome();
+        }
+
+        private void HideLyricsChrome()
+        {
+            if (LyricsHeaderBar == null) return;
+
+            LyricsHeaderBar.IsHitTestVisible = false;
+
+            var fadeOut = new DoubleAnimation
+            {
+                To = 0.0,
+                Duration = TimeSpan.FromMilliseconds(420),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+            };
+            fadeOut.Completed += (s, ev) =>
+            {
+                if (_isLyricsMode && LyricsHeaderBar != null && LyricsHeaderBar.Opacity <= 0.01)
+                {
+                    LyricsHeaderBar.Visibility = Visibility.Collapsed;
+                }
+            };
+            LyricsHeaderBar.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+
+            if (SyncLyricsPillButton != null)
+            {
+                SyncLyricsPillButton.IsHitTestVisible = false;
+                var pillFade = new DoubleAnimation
+                {
+                    To = 0.0,
+                    Duration = TimeSpan.FromMilliseconds(300),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+                };
+                SyncLyricsPillButton.BeginAnimation(UIElement.OpacityProperty, pillFade);
+            }
+        }
+
+        private void ResetLyricsChrome()
+        {
+            _lyricsChromeTimer?.Stop();
+
+            if (LyricsHeaderBar != null)
+            {
+                LyricsHeaderBar.BeginAnimation(UIElement.OpacityProperty, null);
+                LyricsHeaderBar.Opacity = 1.0;
+                LyricsHeaderBar.Visibility = Visibility.Visible;
+                LyricsHeaderBar.IsHitTestVisible = true;
+            }
+
+            if (SyncLyricsPillButton != null)
+            {
+                SyncLyricsPillButton.BeginAnimation(UIElement.OpacityProperty, null);
+                SyncLyricsPillButton.Opacity = 1.0;
+                SyncLyricsPillButton.IsHitTestVisible = true;
+            }
+        }
+
+        /// <summary>
+        /// Window min/max/close capsule only belongs to the main player page.
+        /// Hidden on the lyrics stage and fullscreen motion stage.
+        /// </summary>
+        private void UpdateWindowChromeVisibility()
+        {
+            if (WindowControlsBar == null) return;
+            bool hide = _isLyricsMode || _isFullscreenMotionActive;
+            WindowControlsBar.Visibility = hide ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private void ExitLyrics_Click(object sender, RoutedEventArgs e)
@@ -2512,448 +2616,30 @@ namespace LmenV2.Views
 
         private void LyricsStyleToggle_Click(object sender, RoutedEventArgs e)
         {
-            SetLyricDisplayStyle(_currentDisplayStyle == LyricDisplayStyle.Fisheye ? LyricDisplayStyle.Stage : LyricDisplayStyle.Fisheye);
+            CycleLyricsTemplate();
         }
 
-        private void SetLyricDisplayStyle(LyricDisplayStyle style)
+        private void CycleLyricsTemplate()
         {
-            _currentDisplayStyle = style;
-
-            if (FisheyeLyricsCanvas == null || LyricsScrollViewer == null) return;
-
-            if (style == LyricDisplayStyle.Fisheye)
-            {
-                FisheyeLyricsCanvas.Visibility = Visibility.Visible;
-                LyricsScrollViewer.Visibility = Visibility.Collapsed;
-                if (SyncLyricsPillButton != null) SyncLyricsPillButton.Visibility = Visibility.Collapsed;
-                if (LyricsStyleIcon != null) LyricsStyleIcon.Text = "🐟";
-                if (LyricsStyleText != null) LyricsStyleText.Text = "Fisheye Lens";
-                if (LyricsStyleToggleButton != null) LyricsStyleToggleButton.ToolTip = "Switch to Stage View (S)";
-            }
-            else
-            {
-                FisheyeLyricsCanvas.Visibility = Visibility.Collapsed;
-                LyricsScrollViewer.Visibility = Visibility.Visible;
-                if (LyricsStyleIcon != null) LyricsStyleIcon.Text = "📜";
-                if (LyricsStyleText != null) LyricsStyleText.Text = "Stage View";
-                if (LyricsStyleToggleButton != null) LyricsStyleToggleButton.ToolTip = "Switch to Fisheye Lens (S)";
-                _isUserScrolledAway = false;
-                _activeLineIndex = -1;
-            }
+            if (_kineticRenderer == null) return;
+            _kineticRenderer.CycleTemplate();
+            string name = _kineticRenderer.GetCurrentTemplateDisplayName();
+            if (LyricsStyleText != null) LyricsStyleText.Text = name.ToUpperInvariant();
+            if (LyricsStyleToggleButton != null) LyricsStyleToggleButton.ToolTip = $"Switch Kinetic Typography Template: {name} (S)";
         }
 
-        private void InitFisheyeVisualPool()
+        private void UpdateLyricStageVisibility()
         {
-            if (FisheyeLyricsCanvas == null) return;
-            FisheyeLyricsCanvas.Children.Clear();
-            _fisheyeNodes.Clear();
+            if (KineticLyricsCanvas == null || LyricsScrollViewer == null) return;
 
-            const int poolSize = 13;
-            for (int i = 0; i < poolSize; i++)
+            bool isSynced = _currentLyrics != null && _currentLyrics.IsSynced && _currentLyrics.Lines != null && _currentLyrics.Lines.Count > 0;
+
+            KineticLyricsCanvas.Visibility = isSynced ? Visibility.Visible : Visibility.Collapsed;
+            LyricsScrollViewer.Visibility = isSynced ? Visibility.Collapsed : Visibility.Visible;
+
+            if (SyncLyricsPillButton != null)
             {
-                var scale = new ScaleTransform(1.0, 1.0);
-                var rotate = new RotateTransform(0.0);
-                var translate = new TranslateTransform(0.0, 0.0);
-                var transformGroup = new TransformGroup();
-                transformGroup.Children.Add(scale);
-                transformGroup.Children.Add(rotate);
-                transformGroup.Children.Add(translate);
-
-                var wordText = new TextBlock
-                {
-                    Text = "",
-                    FontSize = 48,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = System.Windows.Media.Brushes.White,
-                    TextAlignment = TextAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center
-                };
-
-                var symbolText = new TextBlock
-                {
-                    Text = "",
-                    FontSize = 26,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center
-                };
-
-                var symbolBadge = new Border
-                {
-                    Margin = new Thickness(14, 0, 0, 0),
-                    Padding = new Thickness(6, 2, 6, 2),
-                    CornerRadius = new CornerRadius(14),
-                    Background = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Visibility = Visibility.Collapsed,
-                    Child = symbolText
-                };
-
-                var stack = new StackPanel
-                {
-                    Orientation = System.Windows.Controls.Orientation.Horizontal,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                stack.Children.Add(wordText);
-                stack.Children.Add(symbolBadge);
-
-                var pill = new Border
-                {
-                    CornerRadius = new CornerRadius(32),
-                    Padding = new Thickness(32, 10, 32, 10),
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Child = stack
-                };
-
-                var container = new Border
-                {
-                    RenderTransformOrigin = new Point(0.5, 0.5),
-                    RenderTransform = transformGroup,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Child = pill,
-                    Visibility = Visibility.Collapsed,
-                    Cursor = System.Windows.Input.Cursors.Hand
-                };
-
-                var node = new FisheyeWordVisualNode
-                {
-                    Container = container,
-                    PillBorder = pill,
-                    WordTextBlock = wordText,
-                    SymbolBadge = symbolBadge,
-                    SymbolTextBlock = symbolText,
-                    ScaleTransform = scale,
-                    RotateTransform = rotate,
-                    TranslateTransform = translate
-                };
-
-                container.MouseLeftButtonUp += (s, e) =>
-                {
-                    if (node.BoundWord != null && !node.BoundWord.IsGap && _currentTrackDuration > TimeSpan.Zero)
-                    {
-                        _lyricClock.Reset(ToTrackPosition(node.BoundWord.StartTime), _isPlaying);
-                        _ = _mediaService.ChangePlaybackPositionAsync(ToTrackPosition(node.BoundWord.StartTime));
-                    }
-                };
-
-                FisheyeLyricsCanvas.Children.Add(container);
-                _fisheyeNodes.Add(node);
-            }
-        }
-
-        private void BuildFisheyeWords(List<LyricLine> lines)
-        {
-            _allFisheyeWords.Clear();
-            _smoothedFisheyeIndex = 0.0;
-            if (lines == null || lines.Count == 0) return;
-
-            int globalIdx = 0;
-            for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
-            {
-                var line = lines[lineIdx];
-
-                // Check for instrumental gap / interlude before this line
-                if (lineIdx > 0)
-                {
-                    var prevLine = lines[lineIdx - 1];
-                    var gapDuration = line.StartTime - prevLine.EndTime;
-                    if (gapDuration > TimeSpan.FromSeconds(3.0))
-                    {
-                        _allFisheyeWords.Add(new FisheyeWordItem
-                        {
-                            GlobalIndex = globalIdx++,
-                            LineIndex = lineIdx,
-                            WordIndex = -1,
-                            Text = "♪  ♪  ♪",
-                            Symbol = "🎵",
-                            StartTime = prevLine.EndTime,
-                            EndTime = line.StartTime,
-                            IsGap = true
-                        });
-                    }
-                }
-
-                if (line.Words != null && line.Words.Count > 0)
-                {
-                    for (int wIdx = 0; wIdx < line.Words.Count; wIdx++)
-                    {
-                        var w = line.Words[wIdx];
-                        _allFisheyeWords.Add(new FisheyeWordItem
-                        {
-                            GlobalIndex = globalIdx++,
-                            LineIndex = lineIdx,
-                            WordIndex = wIdx,
-                            Text = w.Text,
-                            Symbol = LyricSymbolMapper.TryGetSymbol(w.Text),
-                            StartTime = w.StartTime,
-                            EndTime = w.EndTime,
-                            IsGap = false
-                        });
-                    }
-                }
-                else
-                {
-                    // Synthesize per-word timing from line timing if words aren't individually timestamped
-                    var rawTokens = line.Text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (rawTokens.Length > 0)
-                    {
-                        var lineDur = (line.EndTime - line.StartTime).TotalSeconds;
-                        var durPerWord = lineDur > 0 ? (lineDur / rawTokens.Length) : 0.5;
-
-                        for (int wIdx = 0; wIdx < rawTokens.Length; wIdx++)
-                        {
-                            var token = rawTokens[wIdx];
-                            var wStart = line.StartTime + TimeSpan.FromSeconds(wIdx * durPerWord);
-                            var wEnd = line.StartTime + TimeSpan.FromSeconds((wIdx + 1) * durPerWord);
-
-                            _allFisheyeWords.Add(new FisheyeWordItem
-                            {
-                                GlobalIndex = globalIdx++,
-                                LineIndex = lineIdx,
-                                WordIndex = wIdx,
-                                Text = token,
-                                Symbol = LyricSymbolMapper.TryGetSymbol(token),
-                                StartTime = wStart,
-                                EndTime = wEnd,
-                                IsGap = false
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        private void BuildFisheyeWordsFromPlain(string plainLyrics)
-        {
-            _allFisheyeWords.Clear();
-            _smoothedFisheyeIndex = 0.0;
-            if (string.IsNullOrWhiteSpace(plainLyrics)) return;
-
-            using var reader = new System.IO.StringReader(plainLyrics);
-            string? line;
-            int globalIdx = 0;
-            int lineIdx = 0;
-            var currentTime = TimeSpan.FromSeconds(2.0);
-
-            while ((line = reader.ReadLine()) != null)
-            {
-                line = line.Trim();
-                if (string.IsNullOrEmpty(line)) continue;
-
-                var rawTokens = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                var lineDuration = TimeSpan.FromSeconds(Math.Max(2.5, rawTokens.Length * 0.45));
-                var durPerWord = (lineDuration.TotalSeconds / Math.Max(1, rawTokens.Length));
-
-                for (int wIdx = 0; wIdx < rawTokens.Length; wIdx++)
-                {
-                    var token = rawTokens[wIdx];
-                    var wStart = currentTime + TimeSpan.FromSeconds(wIdx * durPerWord);
-                    var wEnd = currentTime + TimeSpan.FromSeconds((wIdx + 1) * durPerWord);
-
-                    _allFisheyeWords.Add(new FisheyeWordItem
-                    {
-                        GlobalIndex = globalIdx++,
-                        LineIndex = lineIdx,
-                        WordIndex = wIdx,
-                        Text = token,
-                        Symbol = LyricSymbolMapper.TryGetSymbol(token),
-                        StartTime = wStart,
-                        EndTime = wEnd,
-                        IsGap = false
-                    });
-                }
-
-                currentTime += lineDuration + TimeSpan.FromSeconds(0.8);
-                lineIdx++;
-            }
-        }
-
-        private void UpdateFisheyeLyricsFrame(double dt)
-        {
-            if (_allFisheyeWords.Count == 0 || FisheyeLyricsCanvas == null || _fisheyeNodes.Count == 0) return;
-
-            var position = LyricClockPosition;
-
-            // 1. Locate current word and exact fractional progress
-            double targetIndex = 0.0;
-            int activeWordIdx = -1;
-
-            for (int i = 0; i < _allFisheyeWords.Count; i++)
-            {
-                var word = _allFisheyeWords[i];
-                if (position >= word.StartTime && position < word.EndTime)
-                {
-                    activeWordIdx = i;
-                    double wordDur = (word.EndTime - word.StartTime).TotalSeconds;
-                    double progress = wordDur > 0.001
-                        ? Math.Clamp((position - word.StartTime).TotalSeconds / wordDur, 0.0, 1.0)
-                        : 0.0;
-                    targetIndex = i + (progress * 0.7);
-                    break;
-                }
-            }
-
-            if (activeWordIdx == -1)
-            {
-                if (position < _allFisheyeWords[0].StartTime)
-                {
-                    targetIndex = 0.0;
-                }
-                else if (position >= _allFisheyeWords[_allFisheyeWords.Count - 1].EndTime)
-                {
-                    targetIndex = _allFisheyeWords.Count - 1;
-                }
-                else
-                {
-                    // Between words (inter-word gap)
-                    for (int i = 0; i < _allFisheyeWords.Count - 1; i++)
-                    {
-                        var curr = _allFisheyeWords[i];
-                        var next = _allFisheyeWords[i + 1];
-                        if (position >= curr.EndTime && position < next.StartTime)
-                        {
-                            double gapDur = (next.StartTime - curr.EndTime).TotalSeconds;
-                            double gapProg = gapDur > 0.001
-                                ? Math.Clamp((position - curr.EndTime).TotalSeconds / gapDur, 0.0, 1.0)
-                                : 0.0;
-                            targetIndex = i + 0.7 + (gapProg * 0.3);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // 2. Exponential inertia for organic fluid camera glide
-            double glideSpeed = 9.5;
-            _smoothedFisheyeIndex += (targetIndex - _smoothedFisheyeIndex) * Math.Min(1.0, dt * glideSpeed);
-
-            double canvasWidth = FisheyeLyricsCanvas.ActualWidth > 10.0 ? FisheyeLyricsCanvas.ActualWidth : ActualWidth;
-            double canvasHeight = FisheyeLyricsCanvas.ActualHeight > 10.0 ? FisheyeLyricsCanvas.ActualHeight : ActualHeight;
-            if (canvasWidth <= 10.0) canvasWidth = 1200.0;
-            if (canvasHeight <= 10.0) canvasHeight = 800.0;
-
-            double centerX = canvasWidth / 2.0;
-            double centerY = canvasHeight / 2.0;
-
-            int centerWordIndex = (int)Math.Round(_smoothedFisheyeIndex);
-            int halfPool = _fisheyeNodes.Count / 2;
-
-            for (int k = 0; k < _fisheyeNodes.Count; k++)
-            {
-                var node = _fisheyeNodes[k];
-                int offset = k - halfPool;
-                int wordIdx = centerWordIndex + offset;
-
-                if (wordIdx < 0 || wordIdx >= _allFisheyeWords.Count)
-                {
-                    node.Container.Visibility = Visibility.Collapsed;
-                    node.BoundWord = null;
-                    continue;
-                }
-
-                var item = _allFisheyeWords[wordIdx];
-                if (!ReferenceEquals(node.BoundWord, item))
-                {
-                    node.BoundWord = item;
-                    node.WordTextBlock.Text = item.Text;
-
-                    // Emoji / Symbol Badge beside word (Verci signature)
-                    if (!string.IsNullOrEmpty(item.Symbol))
-                    {
-                        node.SymbolTextBlock.Text = item.Symbol;
-                        node.SymbolBadge.Visibility = Visibility.Visible;
-                    }
-                    else
-                    {
-                        node.SymbolBadge.Visibility = Visibility.Collapsed;
-                    }
-                }
-                node.Container.Visibility = Visibility.Visible;
-
-                // Distance from exact smoothed focal point
-                double d = wordIdx - _smoothedFisheyeIndex;
-
-                // A. Convex Fisheye Vertical Compression:
-                // Non-linear arctan curve compresses receding words towards the glass poles
-                double maxH = canvasHeight * 0.44;
-                double wordSpacing = _isRestoredMode ? 74.0 : 88.0;
-                double yOffset = maxH * (2.0 / Math.PI) * Math.Atan((d * wordSpacing) / (maxH * 0.68));
-                double y = centerY + yOffset;
-
-                // B. Convex Magnification & Gaussian Bulge:
-                // Apex (d=0) is closest to glass (magnified ~1.30x), tapering gracefully to ~0.38x
-                double gaussian = Math.Exp(-(d * d) / 1.85);
-                double scale = 0.38 + (0.90 * gaussian);
-                node.ScaleTransform.ScaleX = scale;
-                node.ScaleTransform.ScaleY = scale;
-
-                // C. Spherical Barrel Tilt:
-                // Slight rotation tangent to convex spherical curvature
-                double barrelAngle = -3.2 * Math.Clamp(d, -1.8, 1.8);
-                node.RotateTransform.Angle = barrelAngle;
-
-                // D. Depth Falloff & Atmosphere:
-                double opacity = Math.Clamp(0.06 + (0.94 * Math.Exp(-(d * d) / 2.5)), 0.0, 1.0);
-                node.Container.Opacity = opacity;
-
-                // E. Verci Active Highlight Pill:
-                double absDist = Math.Abs(d);
-                if (absDist < 0.5)
-                {
-                    // Inside the active sung focal window:
-                    double activeFactor = Math.Clamp(1.0 - (absDist * 2.0), 0.0, 1.0);
-                    byte alpha = (byte)(235 * activeFactor);
-
-                    var activeCol = _activeWordBrush.Color;
-                    var pillBrush = new SolidColorBrush(Color.FromArgb(alpha, activeCol.R, activeCol.G, activeCol.B));
-                    pillBrush.Freeze();
-                    node.PillBorder.Background = pillBrush;
-                    node.PillBorder.BorderBrush = new SolidColorBrush(Color.FromArgb((byte)(160 * activeFactor), 255, 255, 255));
-                    node.PillBorder.BorderThickness = new Thickness(1.5);
-                    node.WordTextBlock.Foreground = System.Windows.Media.Brushes.White;
-                    node.WordTextBlock.FontWeight = FontWeights.Bold;
-
-                    if (node.PillBorder.Effect == null)
-                    {
-                        node.PillBorder.Effect = new System.Windows.Media.Effects.DropShadowEffect
-                        {
-                            Color = activeCol,
-                            BlurRadius = 26,
-                            ShadowDepth = 3,
-                            Opacity = 0.65
-                        };
-                    }
-                    System.Windows.Controls.Panel.SetZIndex(node.Container, 100);
-                }
-                else
-                {
-                    // Receding/inactive words:
-                    node.PillBorder.Background = System.Windows.Media.Brushes.Transparent;
-                    node.PillBorder.BorderBrush = System.Windows.Media.Brushes.Transparent;
-                    node.PillBorder.BorderThickness = new Thickness(0);
-                    node.PillBorder.Effect = null;
-
-                    // Words already sung get soft album tint, future words get crisp white
-                    if (d < 0)
-                    {
-                        node.WordTextBlock.Foreground = _sungWordBrush;
-                    }
-                    else
-                    {
-                        node.WordTextBlock.Foreground = _inactiveLineBrush;
-                    }
-                    node.WordTextBlock.FontWeight = FontWeights.SemiBold;
-                    System.Windows.Controls.Panel.SetZIndex(node.Container, 50 - (int)(absDist * 5));
-                }
-
-                // F. Center the container at (centerX, y)
-                double w = node.Container.ActualWidth > 0 ? node.Container.ActualWidth : 220.0;
-                double h = node.Container.ActualHeight > 0 ? node.Container.ActualHeight : 60.0;
-                Canvas.SetLeft(node.Container, centerX - (w / 2.0));
-                Canvas.SetTop(node.Container, y - (h / 2.0));
+                SyncLyricsPillButton.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -2968,8 +2654,6 @@ namespace LmenV2.Views
             ResetTransformState();
 
             _lyricItems.Clear();
-            _allFisheyeWords.Clear();
-            _smoothedFisheyeIndex = 0.0;
             LyricsLinesStack.Children.Clear();
             _activeLineIndex = -1;
             _currentScrollOffset = 0;
@@ -2981,10 +2665,11 @@ namespace LmenV2.Views
                 _currentLyrics = null;
                 UpdateLyricsButtonAvailability(hasLyrics: false, isInstrumental: false);
                 LyricsStatusOverlay.Visibility = Visibility.Visible;
-                LyricsStatusIcon.Text = "🎵";
+                LyricsStatusIcon.Text = "ðŸŽµ";
                 LyricsStatusText.Text = "Play music to see timed lyrics";
                 if (LyricsSongTitleText != null) LyricsSongTitleText.Text = "Ready to Play";
                 if (LyricsArtistText != null) LyricsArtistText.Text = "Play music to begin";
+                _kineticRenderer?.SetLyrics(null, "Ready to Play", "Play music to begin", Color.FromRgb(220, 20, 60), Color.FromRgb(255, 60, 150));
                 return;
             }
 
@@ -2997,53 +2682,82 @@ namespace LmenV2.Views
 
             UpdateLyricsButtonAvailability(hasLyrics: false, isInstrumental: false, isChecking: true);
             LyricsStatusOverlay.Visibility = Visibility.Visible;
-            LyricsStatusIcon.Text = "⏳";
+            LyricsStatusIcon.Text = "â³";
             LyricsStatusText.Text = $"Finding lyrics for {track.Title}...";
 
-            var lyrics = await LyricsService.Instance.GetLyricsAsync(track.Title, track.Artist, track.AlbumTitle ?? "", track.Duration, ct);
-
-            if (ct.IsCancellationRequested) return;
-
-            _currentLyrics = lyrics;
-            _currentProviderSourceId = MapProviderToSourceId(lyrics?.Provider);
-
-            bool hasLyrics = lyrics != null && lyrics.HasLyrics;
-            bool isInstrumental = lyrics != null && lyrics.IsInstrumental;
-            UpdateLyricsButtonAvailability(hasLyrics, isInstrumental);
-
-            if (!hasLyrics || lyrics == null)
+            try
             {
-                LyricsStatusOverlay.Visibility = Visibility.Visible;
-                LyricsStatusIcon.Text = "📜";
-                LyricsStatusText.Text = "Synced lyrics not found for this track";
-                return;
-            }
+                var lyrics = await LyricsService.Instance.GetLyricsAsync(track.Title, track.Artist, track.AlbumTitle ?? "", track.Duration, ct);
 
-            if (lyrics.IsInstrumental)
-            {
-                LyricsStatusOverlay.Visibility = Visibility.Visible;
-                LyricsStatusIcon.Text = "♪";
-                LyricsStatusText.Text = "Instrumental ♪";
-                return;
-            }
+                if (ct.IsCancellationRequested) return;
 
-            if (lyrics.IsSynced && lyrics.Lines.Count > 0)
-            {
-                LyricsStatusOverlay.Visibility = Visibility.Collapsed;
-                if (!string.IsNullOrEmpty(lyrics.Provider) && LyricsArtistText != null)
+                _currentLyrics = lyrics;
+                _currentProviderSourceId = MapProviderToSourceId(lyrics?.Provider);
+
+                bool hasLyrics = lyrics != null && lyrics.HasLyrics;
+                bool isInstrumental = lyrics != null && lyrics.IsInstrumental;
+                UpdateLyricsButtonAvailability(hasLyrics, isInstrumental);
+                UpdateLyricStageVisibility();
+
+                if (!hasLyrics || lyrics == null)
                 {
-                    string art = string.IsNullOrWhiteSpace(track.Artist) ? "Unknown Artist" : track.Artist;
-                    LyricsArtistText.Text = $"{art}  •  {lyrics.Provider}";
+                    LyricsStatusOverlay.Visibility = Visibility.Visible;
+                    LyricsStatusIcon.Text = "ðŸ“œ";
+                    LyricsStatusText.Text = "Synced lyrics not found for this track";
+                    _kineticRenderer?.SetLyrics(null, track.Title, track.Artist, track.DominantColor, track.AccentColor);
+                    return;
                 }
-                BuildLyricLineViews(lyrics.Lines);
-                BuildFisheyeWords(lyrics.Lines);
+
+                if (lyrics.IsInstrumental)
+                {
+                    LyricsStatusOverlay.Visibility = Visibility.Visible;
+                    LyricsStatusIcon.Text = "â™ª";
+                    LyricsStatusText.Text = "Instrumental â™ª";
+                    _kineticRenderer?.SetLyrics(null, track.Title, track.Artist, track.DominantColor, track.AccentColor);
+                    return;
+                }
+
+                if (lyrics.IsSynced && lyrics.Lines != null && lyrics.Lines.Count > 0)
+                {
+                    LyricsStatusOverlay.Visibility = Visibility.Collapsed;
+                    if (!string.IsNullOrEmpty(lyrics.Provider) && LyricsArtistText != null)
+                    {
+                        string art = string.IsNullOrWhiteSpace(track.Artist) ? "Unknown Artist" : track.Artist;
+                        LyricsArtistText.Text = $"{art}  â€¢  {lyrics.Provider}";
+                    }
+                    BuildLyricLineViews(lyrics.Lines);
+                    Color dom = track.DominantColor;
+                    Color acc = track.AccentColor;
+                    _kineticRenderer?.SetLyrics(lyrics, track.Title ?? "Ready to Play", track.Artist ?? "Play music to begin", dom, acc);
+                }
+                else if (!string.IsNullOrWhiteSpace(lyrics.PlainLyrics))
+                {
+                    // Fallback to plain lyrics display
+                    LyricsStatusOverlay.Visibility = Visibility.Collapsed;
+                    if (!string.IsNullOrEmpty(lyrics.Provider) && LyricsArtistText != null)
+                    {
+                        string art = string.IsNullOrWhiteSpace(track.Artist) ? "Unknown Artist" : track.Artist;
+                        LyricsArtistText.Text = $"{art}  â€¢  {lyrics.Provider}";
+                    }
+                    BuildPlainLyricsView(lyrics.PlainLyrics);
+                    Color dom = track.DominantColor;
+                    Color acc = track.AccentColor;
+                    _kineticRenderer?.SetLyrics(lyrics, track.Title ?? "Ready to Play", track.Artist ?? "Play music to begin", dom, acc);
+                }
+
+                UpdateLyricStageVisibility();
             }
-            else if (!string.IsNullOrWhiteSpace(lyrics.PlainLyrics))
+            catch (OperationCanceledException)
             {
-                // Fallback to plain lyrics display
-                LyricsStatusOverlay.Visibility = Visibility.Collapsed;
-                BuildPlainLyricsView(lyrics.PlainLyrics);
-                BuildFisheyeWordsFromPlain(lyrics.PlainLyrics);
+                // Track skip or canceled
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[Lyrics Error] {ex}");
+                LyricsStatusOverlay.Visibility = Visibility.Visible;
+                LyricsStatusIcon.Text = "ðŸ“œ";
+                LyricsStatusText.Text = "Could not load lyrics for this track";
+                _kineticRenderer?.SetLyrics(null, track.Title, track.Artist, track.DominantColor, track.AccentColor);
             }
         }
 
@@ -3055,7 +2769,7 @@ namespace LmenV2.Views
         {
             if (milliseconds == 0) return "0.0s";
             double seconds = milliseconds / 1000.0;
-            return (seconds > 0 ? "+" : "−") + Math.Abs(seconds).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
+            return (seconds > 0 ? "+" : "âˆ’") + Math.Abs(seconds).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
         }
 
         private static LyricSourceId? MapProviderToSourceId(string? provider)
@@ -3099,8 +2813,8 @@ namespace LmenV2.Views
             _preTransformLyrics = null;
             _translationActive = false;
             _romanizationActive = false;
-            if (LyricsTranslateText != null) LyricsTranslateText.Text = "Translate";
-            if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "Romanize";
+            if (LyricsTranslateText != null) LyricsTranslateText.Text = "TRANSLATE";
+            if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "ROMANIZE";
             SetToolButtonActive(LyricsTranslateButton, false);
             SetToolButtonActive(LyricsRomanizeButton, false);
             SetLyricsStatus(null);
@@ -3145,10 +2859,10 @@ namespace LmenV2.Views
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
                 };
                 LyricsScrollViewer.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-                FisheyeLyricsCanvas.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                KineticLyricsCanvas.BeginAnimation(UIElement.OpacityProperty, fadeIn);
             };
             LyricsScrollViewer.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-            FisheyeLyricsCanvas.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            KineticLyricsCanvas.BeginAnimation(UIElement.OpacityProperty, fadeOut);
         }
 
         private void ApplyLyricsToStage(TrackLyrics lyrics, string artist)
@@ -3161,7 +2875,7 @@ namespace LmenV2.Views
             if (!lyrics.HasLyrics)
             {
                 LyricsStatusOverlay.Visibility = Visibility.Visible;
-                LyricsStatusIcon.Text = "📜";
+                LyricsStatusIcon.Text = "ðŸ“œ";
                 LyricsStatusText.Text = "Synced lyrics not found for this track";
                 return;
             }
@@ -3169,27 +2883,35 @@ namespace LmenV2.Views
             if (lyrics.IsInstrumental)
             {
                 LyricsStatusOverlay.Visibility = Visibility.Visible;
-                LyricsStatusIcon.Text = "♪";
-                LyricsStatusText.Text = "Instrumental ♪";
+                LyricsStatusIcon.Text = "â™ª";
+                LyricsStatusText.Text = "Instrumental â™ª";
                 return;
             }
 
-            string artistLine = string.IsNullOrEmpty(lyrics.Provider) ? displayArtist : $"{displayArtist}  •  {lyrics.Provider}";
+            string artistLine = string.IsNullOrEmpty(lyrics.Provider) ? displayArtist : $"{displayArtist}  â€¢  {lyrics.Provider}";
 
             if (lyrics.IsSynced && lyrics.Lines.Count > 0)
             {
                 LyricsStatusOverlay.Visibility = Visibility.Collapsed;
                 if (LyricsArtistText != null) LyricsArtistText.Text = artistLine;
                 BuildLyricLineViews(lyrics.Lines);
-                BuildFisheyeWords(lyrics.Lines);
+                Color dom = _mediaService.CurrentTrack?.DominantColor ?? Color.FromRgb(220, 20, 60);
+                Color acc = _mediaService.CurrentTrack?.AccentColor ?? Color.FromRgb(255, 60, 150);
+                string title = _mediaService.CurrentTrack?.Title ?? "Ready to Play";
+                _kineticRenderer?.SetLyrics(lyrics, title, displayArtist, dom, acc);
             }
             else if (!string.IsNullOrWhiteSpace(lyrics.PlainLyrics))
             {
                 LyricsStatusOverlay.Visibility = Visibility.Collapsed;
                 if (LyricsArtistText != null) LyricsArtistText.Text = artistLine;
                 BuildPlainLyricsView(lyrics.PlainLyrics);
-                BuildFisheyeWordsFromPlain(lyrics.PlainLyrics);
+                Color dom = _mediaService.CurrentTrack?.DominantColor ?? Color.FromRgb(220, 20, 60);
+                Color acc = _mediaService.CurrentTrack?.AccentColor ?? Color.FromRgb(255, 60, 150);
+                string title = _mediaService.CurrentTrack?.Title ?? "Ready to Play";
+                _kineticRenderer?.SetLyrics(lyrics, title, displayArtist, dom, acc);
             }
+
+            UpdateLyricStageVisibility();
         }
 
         private static List<LyricLine> GetTransformSourceLines(TrackLyrics lyrics)
@@ -3255,13 +2977,13 @@ namespace LmenV2.Views
             }
 
             _translateBusy = true;
-            if (LyricsTranslateText != null) LyricsTranslateText.Text = "Translating...";
+            if (LyricsTranslateText != null) LyricsTranslateText.Text = "TRANSLATING...";
             SetLyricsStatus("Translating lyrics...");
 
             var result = await LyricsTranslationService.TranslateAsync(snapshot.SongKey, sourceLines, SettingsService.Instance.LyricsTranslationLanguage);
 
             _translateBusy = false;
-            if (LyricsTranslateText != null) LyricsTranslateText.Text = "Translate";
+            if (LyricsTranslateText != null) LyricsTranslateText.Text = "TRANSLATE";
             if (!ReferenceEquals(_currentLyrics, snapshot)) return;
 
             switch (result.Status)
@@ -3273,13 +2995,13 @@ namespace LmenV2.Views
                     _romanizationActive = false;
                     SetToolButtonActive(LyricsTranslateButton, true);
                     SetToolButtonActive(LyricsRomanizeButton, false);
-                    if (LyricsTranslateText != null) LyricsTranslateText.Text = "Original";
+                    if (LyricsTranslateText != null) LyricsTranslateText.Text = "ORIGINAL";
                     var updated = snapshot.IsSynced
                         ? CloneWithLines(snapshot, result.Lines!, null)
                         : CloneWithLines(snapshot, result.Lines!, string.Join("\n", result.Lines!.Select(l => l.Text)));
                     FadeSwapLyrics(() => ApplyLyricsToStage(updated, _lastTrackArtist));
                     string suffix = result.FromCache ? " (cached)" : "";
-                    SetLyricsStatus($"Translated · from {LyricsTranslationLanguages.DisplayName(result.SourceLanguage)}{suffix}");
+                    SetLyricsStatus($"Translated Â· from {LyricsTranslationLanguages.DisplayName(result.SourceLanguage)}{suffix}");
                     break;
                 }
                 case LyricsTransformStatus.SameLanguage:
@@ -3317,13 +3039,13 @@ namespace LmenV2.Views
             }
 
             _translateBusy = true;
-            if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "Romanizing...";
+            if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "ROMANIZING...";
             SetLyricsStatus("Romanizing lyrics...");
 
             var result = await LyricsTranslationService.RomanizeAsync(snapshot.SongKey, sourceLines, SettingsService.Instance.LyricsTranslationLanguage);
 
             _translateBusy = false;
-            if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "Romanize";
+            if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "ROMANIZE";
             if (!ReferenceEquals(_currentLyrics, snapshot)) return;
 
             switch (result.Status)
@@ -3335,12 +3057,12 @@ namespace LmenV2.Views
                     _translationActive = false;
                     SetToolButtonActive(LyricsRomanizeButton, true);
                     SetToolButtonActive(LyricsTranslateButton, false);
-                    if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "Original";
+                    if (LyricsRomanizeText != null) LyricsRomanizeText.Text = "ORIGINAL";
                     var updated = snapshot.IsSynced
                         ? CloneWithLines(snapshot, result.Lines!, null)
                         : CloneWithLines(snapshot, result.Lines!, string.Join("\n", result.Lines!.Select(l => l.Text)));
                     FadeSwapLyrics(() => ApplyLyricsToStage(updated, _lastTrackArtist));
-                    SetLyricsStatus($"Romanized · from {LyricsTranslationLanguages.DisplayName(result.SourceLanguage)}");
+                    SetLyricsStatus($"Romanized Â· from {LyricsTranslationLanguages.DisplayName(result.SourceLanguage)}");
                     break;
                 }
                 case LyricsTransformStatus.AlreadyRomanized:
@@ -3475,7 +3197,7 @@ namespace LmenV2.Views
                 {
                     right.Children.Add(new TextBlock
                     {
-                        Text = "✓",
+                        Text = "âœ“",
                         FontSize = 13,
                         FontWeight = FontWeights.Bold,
                         Foreground = new SolidColorBrush(Color.FromArgb(0xE0, 0x7C, 0xFF, 0xB0))
@@ -3531,7 +3253,7 @@ namespace LmenV2.Views
 
             _currentProviderSourceId = info.Id;
             ResetTransformState();
-            SetLyricsStatus($"Source · {info.Label}");
+            SetLyricsStatus($"Source Â· {info.Label}");
             FadeSwapLyrics(() => ApplyLyricsToStage(result, _lastTrackArtist));
             LyricsProviderOverlay.Visibility = Visibility.Collapsed;
         }
@@ -4309,6 +4031,12 @@ namespace LmenV2.Views
             _pastLineBrush = new SolidColorBrush(Color.FromArgb(48, 255, 255, 255));
             _pastLineBrush.Freeze();
 
+            // Kinetic stage palette: two real album tones
+            if (_currentLyrics != null && _mediaService.CurrentTrack != null)
+            {
+                _kineticRenderer?.SetLyrics(_currentLyrics, _mediaService.CurrentTrack.Title ?? "Ready to Play", _mediaService.CurrentTrack.Artist ?? "Play music to begin", baseColor, _mediaService.CurrentTrack.AccentColor);
+            }
+
             // Invalidate active line index to immediately refresh colors on next frame
             if (_isLyricsMode && _lyricItems.Count > 0)
             {
@@ -4521,6 +4249,7 @@ namespace LmenV2.Views
             {
                 TvMotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, null);
                 TvMotionVideoBackdrop.Opacity = 0.0;
+                TvMotionVideoBackdrop.Visibility = Visibility.Collapsed;
                 TvMotionVideoBackdrop.Stop();
                 TvMotionVideoBackdrop.Source = null;
             }
@@ -4638,6 +4367,7 @@ namespace LmenV2.Views
             FullscreenMotionStage.Visibility = Visibility.Visible;
             VisualizerContentGrid.Visibility = Visibility.Collapsed;
             FullscreenLyricsStage.Visibility = Visibility.Collapsed;
+            UpdateWindowChromeVisibility();
 
             // Resolve URI for motion artwork
             Uri? uriToPlay = null;
@@ -4764,6 +4494,7 @@ namespace LmenV2.Views
 
             FullscreenMotionStage.Visibility = Visibility.Collapsed;
             VisualizerContentGrid.Visibility = Visibility.Visible;
+            UpdateWindowChromeVisibility();
 
             // Re-mount to small album cover video if motion artwork is available
             if (_isMotionAvailable && _currentMotionResult != null)
@@ -5107,6 +4838,7 @@ namespace LmenV2.Views
 
                     if (TvMotionVideoBackdrop != null && TvMotionVideoBackdrop.Source != null)
                     {
+                        TvMotionVideoBackdrop.Visibility = Visibility.Visible;
                         var videoFade = new System.Windows.Media.Animation.DoubleAnimation(0.0, _settings.BackdropBrightness, TimeSpan.FromMilliseconds(450))
                         {
                             EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
@@ -5149,6 +4881,7 @@ namespace LmenV2.Views
             {
                 TvMotionVideoBackdrop.BeginAnimation(UIElement.OpacityProperty, null);
                 TvMotionVideoBackdrop.Opacity = 0.0;
+                TvMotionVideoBackdrop.Visibility = Visibility.Collapsed;
                 TvMotionVideoBackdrop.Stop();
                 TvMotionVideoBackdrop.Source = null;
             }

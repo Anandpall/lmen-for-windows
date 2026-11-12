@@ -29,4 +29,10 @@
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="Rendering\Kinetic\Shaders\Fisheye.ps" />
+    <Resource Include="Rendering\Kinetic\Shaders\Fisheye.ps" />
+    <None Remove="Rendering\Kinetic\Shaders\Fisheye.fx" />
+  </ItemGroup>
+
 </Project>

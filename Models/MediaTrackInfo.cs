@@ -20,6 +20,7 @@ namespace LmenV2.Models
 
         public Color DominantColor { get; set; } = Color.FromRgb(220, 20, 60);      // Crimson / Ruby default
         public Color AccentColor { get; set; } = Color.FromRgb(255, 50, 80);        // Vivid Neon
+        public Color SecondaryColor { get; set; } = Color.FromRgb(255, 60, 150);    // Second artwork tone
         public Color AmbientColor { get; set; } = Color.FromRgb(80, 10, 25);        // Deep aura
         public Color DarkVignetteColor { get; set; } = Color.FromRgb(15, 5, 8);     // Screen background
     }

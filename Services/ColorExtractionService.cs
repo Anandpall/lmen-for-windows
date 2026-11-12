@@ -10,6 +10,7 @@ namespace LmenV2.Services
     {
         public Color DominantColor { get; set; } = Color.FromRgb(225, 25, 65);
         public Color AccentColor { get; set; } = Color.FromRgb(255, 45, 80);
+        public Color SecondaryColor { get; set; } = Color.FromRgb(255, 60, 150);
         public Color AmbientColor { get; set; } = Color.FromRgb(85, 12, 28);
         public Color DarkVignetteColor { get; set; } = Color.FromRgb(14, 5, 8);
     }
@@ -112,10 +113,52 @@ namespace LmenV2.Services
                 HsvToRgb(dh, 0.45, 0.07, out byte dkr, out byte dkg, out byte dkb);
                 Color darkVignette = Color.FromRgb(dkr, dkg, dkb);
 
+                // Secondary artwork hue: a second, visibly distinct chromatic color from the
+                // cover. Used by the kinetic lyric stage so text + sticker slabs can pull two
+                // real album tones (e.g. coral text on magenta stickers) instead of one hue.
+                Color secondaryColor;
+                Color? secondaryCandidate = null;
+                foreach (var kv in chromaticColorCounts.OrderByDescending(kv => kv.Value))
+                {
+                    int key = kv.Key;
+                    if (key == dominantKey) continue;
+                    byte cr = (byte)((key >> 16) & 0xFF);
+                    byte cg = (byte)((key >> 8) & 0xFF);
+                    byte cb = (byte)(key & 0xFF);
+
+                    RgbToHsv(cr, cg, cb, out double ch, out double cs, out double cv);
+                    double hueDelta = Math.Abs(ch - dh);
+                    if (hueDelta > 180.0) hueDelta = 360.0 - hueDelta;
+
+                    if (hueDelta >= 24.0 && cs >= 0.25 && cv >= 0.22)
+                    {
+                        secondaryCandidate = Color.FromRgb(cr, cg, cb);
+                        break;
+                    }
+                }
+
+                if (secondaryCandidate.HasValue)
+                {
+                    RgbToHsv(secondaryCandidate.Value.R, secondaryCandidate.Value.G, secondaryCandidate.Value.B,
+                        out double sh, out double ss, out double sv);
+                    double secSat = Math.Max(0.72, Math.Min(1.0, ss * 1.30));
+                    double secVal = Math.Max(0.85, Math.Min(1.0, sv * 1.25));
+                    HsvToRgb(sh, secSat, secVal, out byte sr, out byte sg, out byte sb);
+                    secondaryColor = Color.FromRgb(sr, sg, sb);
+                }
+                else
+                {
+                    // Monochrome artwork: rotate the dominant hue into a harmonious second tone
+                    HsvToRgb((dh + 40.0) % 360.0, Math.Max(0.80, glowSat), Math.Max(0.90, glowVal),
+                        out byte sr, out byte sg, out byte sb);
+                    secondaryColor = Color.FromRgb(sr, sg, sb);
+                }
+
                 return new ExtractedPalette
                 {
                     DominantColor = dominantGlowColor,
                     AccentColor = accentGlowColor,
+                    SecondaryColor = secondaryColor,
                     AmbientColor = ambientColor,
                     DarkVignetteColor = darkVignette
                 };
@@ -132,12 +175,13 @@ namespace LmenV2.Services
             {
                 DominantColor = Color.FromRgb(235, 25, 60),      // Vibrant Red / Crimson
                 AccentColor = Color.FromRgb(255, 45, 80),        // Neon glow
+                SecondaryColor = Color.FromRgb(255, 60, 150),    // Album secondary tone
                 AmbientColor = Color.FromRgb(85, 12, 28),        // Deep backdrop
                 DarkVignetteColor = Color.FromRgb(14, 5, 8)      // Deep vignette
             };
         }
 
-        private static void RgbToHsv(byte r, byte g, byte b, out double h, out double s, out double v)
+        public static void RgbToHsv(byte r, byte g, byte b, out double h, out double s, out double v)
         {
             double dr = r / 255.0;
             double dg = g / 255.0;
@@ -169,7 +213,7 @@ namespace LmenV2.Services
             }
         }
 
-        private static void HsvToRgb(double h, double s, double v, out byte r, out byte g, out byte b)
+        public static void HsvToRgb(double h, double s, double v, out byte r, out byte g, out byte b)
         {
             int hi = (int)Math.Floor(h / 60) % 6;
             double f = (h / 60) - Math.Floor(h / 60);

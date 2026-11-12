@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using Panel = System.Windows.Controls.Panel;
-using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using ShapeRect = System.Windows.Shapes.Rectangle;
 
 namespace LmenV2.Rendering

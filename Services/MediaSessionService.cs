@@ -240,6 +240,7 @@ namespace LmenV2.Services
                     Duration = duration,
                     DominantColor = palette.DominantColor,
                     AccentColor = palette.AccentColor,
+                    SecondaryColor = palette.SecondaryColor,
                     AmbientColor = palette.AmbientColor,
                     DarkVignetteColor = palette.DarkVignetteColor
                 };
@@ -280,6 +281,7 @@ namespace LmenV2.Services
                 CurrentTrack.Thumbnail = highRes;
                 CurrentTrack.DominantColor = hdPalette.DominantColor;
                 CurrentTrack.AccentColor = hdPalette.AccentColor;
+                CurrentTrack.SecondaryColor = hdPalette.SecondaryColor;
                 CurrentTrack.AmbientColor = hdPalette.AmbientColor;
                 CurrentTrack.DarkVignetteColor = hdPalette.DarkVignetteColor;
 
@@ -333,6 +335,7 @@ namespace LmenV2.Services
                 IsPlaying = false,
                 DominantColor = palette.DominantColor,
                 AccentColor = palette.AccentColor,
+                SecondaryColor = palette.SecondaryColor,
                 AmbientColor = palette.AmbientColor,
                 DarkVignetteColor = palette.DarkVignetteColor
             };

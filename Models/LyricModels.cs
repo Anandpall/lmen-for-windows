@@ -134,19 +134,4 @@ namespace LmenV2.Models
         public string PlainLyrics { get; set; } = string.Empty;
         public bool HasLyrics => IsSynced || IsInstrumental || !string.IsNullOrWhiteSpace(PlainLyrics);
     }
-
-    /// <summary>
-    /// Represents an individual word in the Verci-inspired Fisheye Lens lyrics stack.
-    /// </summary>
-    public class FisheyeWordItem
-    {
-        public int GlobalIndex { get; set; }
-        public int LineIndex { get; set; }
-        public int WordIndex { get; set; }
-        public string Text { get; set; } = string.Empty;
-        public string? Symbol { get; set; }
-        public TimeSpan StartTime { get; set; }
-        public TimeSpan EndTime { get; set; }
-        public bool IsGap { get; set; }
-    }
 }
